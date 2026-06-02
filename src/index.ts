@@ -31,6 +31,8 @@ import {
   getPackageVersion,
 } from "./git.ts";
 import { ui } from "./ui.ts";
+import { generateChangelog } from "./changelog/index.ts";
+import { loadChangelogConfig } from "./config.ts";
 import type { ReleaseTarget, ReleaseContext } from "./types.ts";
 
 const ROOT = process.cwd();
@@ -322,11 +324,8 @@ const main = defineCommand({
               ? `tags/${latestTag}...${prereleaseTarget}`
               : `tags/${latestReleaseTag}...${releaseTarget}`;
 
-            const { stdout } = await execa(
-              `npx jira-changelog --config changelog.config.cjs --range ${range}`,
-            );
-
-            ctx.changelog = stdout.trim();
+            const config = await loadChangelogConfig(ROOT);
+            ctx.changelog = await generateChangelog(range, config);
 
             if (!ctx.changelog) {
               ctx.changelog = "No ticket changes detected.";

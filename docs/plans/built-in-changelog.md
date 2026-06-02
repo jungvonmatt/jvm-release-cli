@@ -6,20 +6,20 @@ How might we make `jvm-release-cli` generate Jira-linked changelogs without requ
 
 ## Decisions (Resolved)
 
-| # | Decision | Resolution |
-|---|----------|-----------|
-| 1 | Term "Changelog" | The generated Markdown string (release body). Not a file, not the process. |
-| 2 | GitHub owner/repo | Auto-detect from `git remote` (reuse `getGithubProjectUrl()`). Optional config override for edge cases. |
-| 3 | Config location | `@jungvonmatt/config-loader` with `name: "release-cli"`. Multi-source lookup: `package.json` key, `.release-clirc.json`, `release-cli.config.ts`, etc. |
-| 4 | Missing config behavior | Dev machine (`!process.env.CI`): interactive prompts. CI: hard error with actionable message. |
-| 5 | Jira API strategy | Bulk via JQL: `POST /rest/api/3/search` with `key IN (...)`. Single call per release. |
-| 6 | Commits without ticket | "Other Commits" section. Built-in noise filter: merge commits between protected branches, l10n syncs. |
-| 7 | Missing Jira credentials | Graceful degradation: fallback to raw commit summaries + ticket IDs as plain text. Warning logged. Release continues. |
-| 8 | HTTP client | Native `fetch`. Zero HTTP dependencies. |
-| 9 | Template engine | Hardcoded TypeScript template-literals. No template engine. |
-| 10 | Issue-type grouping | Hardcoded default order (Epic → Story → Task → Sub-Task → Bug → Technical Improvement → Technical Debt → IT Security). Unknown types appended at end under their original name. |
-| 11 | Migration strategy | Major version bump (clean break). No legacy `jira-changelog` support. |
-| 12 | Standalone subcommand | Yes (`jvm-release-cli changelog --range ...`), but after MVP. |
+| #   | Decision                 | Resolution                                                                                                                                                                      |
+| --- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Term "Changelog"         | The generated Markdown string (release body). Not a file, not the process.                                                                                                      |
+| 2   | GitHub owner/repo        | Auto-detect from `git remote` (reuse `getGithubProjectUrl()`). Optional config override for edge cases.                                                                         |
+| 3   | Config location          | `@jungvonmatt/config-loader` with `name: "release-cli"`. Multi-source lookup: `package.json` key, `.release-clirc.json`, `release-cli.config.ts`, etc.                          |
+| 4   | Missing config behavior  | Dev machine (`!process.env.CI`): interactive prompts. CI: hard error with actionable message.                                                                                   |
+| 5   | Jira API strategy        | Bulk via JQL: `POST /rest/api/3/search` with `key IN (...)`. Single call per release.                                                                                           |
+| 6   | Commits without ticket   | "Other Commits" section. Built-in noise filter: merge commits between protected branches, l10n syncs.                                                                           |
+| 7   | Missing Jira credentials | Graceful degradation: fallback to raw commit summaries + ticket IDs as plain text. Warning logged. Release continues.                                                           |
+| 8   | HTTP client              | Native `fetch`. Zero HTTP dependencies.                                                                                                                                         |
+| 9   | Template engine          | Hardcoded TypeScript template-literals. No template engine.                                                                                                                     |
+| 10  | Issue-type grouping      | Hardcoded default order (Epic → Story → Task → Sub-Task → Bug → Technical Improvement → Technical Debt → IT Security). Unknown types appended at end under their original name. |
+| 11  | Migration strategy       | Major version bump (clean break). No legacy `jira-changelog` support.                                                                                                           |
+| 12  | Standalone subcommand    | Yes (`jvm-release-cli changelog --range ...`), but after MVP.                                                                                                                   |
 
 ## Recommended Direction
 
@@ -42,6 +42,7 @@ Replace the `npx jira-changelog` call with a built-in module that:
 Uses `@jungvonmatt/config-loader` (`name: "release-cli"`).
 
 Consumer creates **one** of:
+
 - `"release-cli"` key in `package.json`
 - `.release-clirc.json`
 - `release-cli.config.ts`
@@ -49,11 +50,12 @@ Consumer creates **one** of:
 ```jsonc
 {
   "jiraBaseUrl": "https://fielmann.atlassian.net",
-  "ticketPattern": "((CPP|SC[A-Z]+)-[0-9]{4,})"
+  "ticketPattern": "((CPP|SC[A-Z]+)-[0-9]{4,})",
 }
 ```
 
 Environment variables (mapped via `envMap`):
+
 - `CHANGELOG_JIRA_API_HOST` → `jiraApiHost`
 - `CHANGELOG_JIRA_API_EMAIL` → `jiraApiEmail`
 - `CHANGELOG_JIRA_API_TOKEN` → `jiraApiToken`
@@ -81,6 +83,7 @@ jira-changelog uses `simple-git` with **parent-aware graph resolution**. Our bui
 ### How it works
 
 1. **Structured log format** — not just subject lines:
+
    ```
    %H   → full SHA (revision)
    %P   → parent SHAs (space-separated — crucial for graph)
@@ -97,16 +100,18 @@ jira-changelog uses `simple-git` with **parent-aware graph resolution**. Our bui
    - Any commit NOT on the mainline is a "merged" branch commit
 
 3. **Merge nesting (1-level-deep graph):**
+
    ```
    Mainline:  A ← B ← C(merge) ← D
    Branch:              ↖ b1 ← b2
-   
+
    Result:
      - D (top-level)
      - C (top-level, graph.merged = [b1, b2])
      - B (top-level)
      - A (top-level)
    ```
+
    Branch commits at any depth are flattened into the merge's `merged[]` array.
 
 4. **Message consolidation:**
@@ -115,9 +120,11 @@ jira-changelog uses `simple-git` with **parent-aware graph resolution**. Our bui
    - This means: a ticket mentioned only in a branch commit body still gets picked up
 
 5. **Revert detection:**
+
    ```
    Pattern: /^Revert ".*?This reverts commit ([0-9a-z]+)\.$/
    ```
+
    - Odd number of "Revert" prefixes → actual revert → exclude from consolidation
    - Even number → unrevert → keep it
 
@@ -129,6 +136,7 @@ jira-changelog uses `simple-git` with **parent-aware graph resolution**. Our bui
 ### Why this matters
 
 Without graph parsing, in a project using merge commits (non-squash):
+
 - Tickets in branch commits would be **invisible** (only the merge commit summary appears in flat `git log --first-parent`)
 - Reverting a feature would still show the reverted tickets in the changelog
 - You'd get duplicate ticket entries from both the branch commit and the merge commit
@@ -148,6 +156,7 @@ No other new runtime dependencies. `fetch` is native. No `simple-git` needed —
 ## MVP Scope (v2.0.0)
 
 ### In
+
 - **Graph-based git log parsing** (not flat `git log`):
   - Fetch with `%H`, `%P`, `%ai`, `%s`, `%b`, `%aN`, `%ae` format
   - Range support: `from...to` (symmetric) and `from..to` (asymmetric)
@@ -172,6 +181,7 @@ No other new runtime dependencies. `fetch` is native. No `simple-git` needed —
 - GitHub owner/repo auto-detection from git remote
 
 ### Out
+
 - GitHub PR contributor enrichment (v2.1)
 - Custom template override (later if needed)
 - Standalone `changelog` subcommand (v2.1)
@@ -189,6 +199,7 @@ No other new runtime dependencies. `fetch` is native. No `simple-git` needed —
 ## Implementation Phases
 
 ### Phase 1: MVP (v2.0.0)
+
 1. Add `@jungvonmatt/config-loader` dependency
 2. Create `src/config.ts` — load config with `envMap` + conditional prompts
 3. Create `src/changelog/types.ts` — `CommitLog`, `GraphNode`, `Range` types
@@ -201,6 +212,7 @@ No other new runtime dependencies. `fetch` is native. No `simple-git` needed —
 10. Tests for each module (graph logic needs extensive coverage)
 
 ### Phase 2: Enrichment (v2.1)
+
 1. Add `src/changelog/github.ts` — PR data fetch via native `fetch`
 2. Contributor attribution + PR links in formatter
 3. Conditional on `CHANGELOG_GITHUB_API_TOKEN`

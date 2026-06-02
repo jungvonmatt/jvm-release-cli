@@ -36,6 +36,7 @@
   },
   "dependencies": {
     "@inquirer/prompts": "^7.5.0",
+    "@jungvonmatt/config-loader": "^0.6.2",
     "citty": "^0.1.6",
     "listr2": "^8.3.3",
     "open": "^10.1.0",

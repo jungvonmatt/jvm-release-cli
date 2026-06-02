@@ -49,9 +49,7 @@ describe("Version - constructor", () => {
   });
 
   test("throws on invalid increment", () => {
-    expect(() => new Version("1.2.3", "invalid" as any)).toThrow(
-      "should be one of",
-    );
+    expect(() => new Version("1.2.3", "invalid" as any)).toThrow("should be one of");
   });
 });
 
