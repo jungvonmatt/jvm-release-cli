@@ -1,0 +1,55 @@
+{
+  "name": "jvm-release-cli",
+  "version": "0.0.0",
+  "description": "A general-purpose release preparation CLI for git-based projects.",
+  "homepage": "https://github.com/nicepkg/jvm-release-cli#readme",
+  "bugs": {
+    "url": "https://github.com/nicepkg/jvm-release-cli/issues"
+  },
+  "license": "MIT",
+  "author": "Benjamin Zoerb",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nicepkg/jvm-release-cli.git"
+  },
+  "bin": {
+    "jvm-release-cli": "./dist/index.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "dev": "vp pack --watch",
+    "test": "vp test",
+    "check": "vp check",
+    "prepublishOnly": "vp run build",
+    "prepare": "vp config"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^7.5.0",
+    "citty": "^0.1.6",
+    "listr2": "^8.3.3",
+    "open": "^10.1.0",
+    "picocolors": "^1.1.1",
+    "semver": "^7.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "@types/semver": "^7.7.0",
+    "@typescript/native-preview": "7.0.0-dev.20260509.2",
+    "@vitest/coverage-v8": "^4.1.7",
+    "bumpp": "^11.1.0",
+    "typescript": "^6.0.3",
+    "vite-plus": "^0.1.20"
+  },
+  "packageManager": "pnpm@11.1.1"
+}
