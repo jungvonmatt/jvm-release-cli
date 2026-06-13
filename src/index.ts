@@ -320,7 +320,11 @@ const main = defineCommand({
             title: "Generating changelog",
             task: async () => {
               const prereleaseTarget = preview ? "HEAD" : `tags/${ctx.version}`;
-              const releaseTarget = preview ? (latestTag === INITIAL_VERSION ? "HEAD" : `tags/${latestTag}`) : `tags/${ctx.version}`;
+              const releaseTarget = preview
+                ? latestTag === INITIAL_VERSION
+                  ? "HEAD"
+                  : `tags/${latestTag}`
+                : `tags/${ctx.version}`;
 
               const fromTag = ctx.isPrerelease ? latestTag : latestReleaseTag;
               const toRef = ctx.isPrerelease ? prereleaseTarget : releaseTarget;
