@@ -13,7 +13,7 @@
     "url": "git+https://github.com/jungvonmatt/jvm-release-cli.git"
   },
   "bin": {
-    "jvm-release-cli": "./dist/index.mjs"
+    "jvm-release": "./dist/index.mjs"
   },
   "files": [
     "dist"

@@ -1,4 +1,4 @@
-# jvm-release-cli
+# jvm-release
 
 [![CI](https://github.com/jungvonmatt/jvm-release-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/jungvonmatt/jvm-release-cli/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/jvm-release-cli)](https://www.npmjs.com/package/jvm-release-cli)
@@ -30,21 +30,28 @@ npm install --save-dev jvm-release-cli
 
 ```bash
 # Interactive mode — prompts for deployment target
-jvm-release-cli
+jvm-release
 
 # Skip the prompt and release directly
-jvm-release-cli test         # creates a prerelease (e.g. v1.2.0-pre.1)
-jvm-release-cli production   # creates a stable release (e.g. v1.2.0)
+jvm-release test         # creates a prerelease (e.g. v1.2.0-pre.1)
+jvm-release production   # creates a stable release (e.g. v1.2.0)
 
 # Flags
-jvm-release-cli --branch main   # release branch to check against (default: main)
-jvm-release-cli --preview       # dry-run: print git commands, make no changes
-jvm-release-cli --no-tests      # skip test execution step
+jvm-release --branch main   # release branch to check against (default: main)
+jvm-release --preview       # dry-run: print git commands, make no changes
+jvm-release --no-tests      # skip test execution step
 ```
+
+All three bin aliases point to the same CLI:
+
+| Command       | Notes                  |
+| ------------- | ---------------------- |
+| `jvm-release` | Recommended short form |
+| `release`     | Shortest alias         |
 
 ### Release workflow
 
-When you run `jvm-release-cli`, it:
+When you run `jvm-release`, it:
 
 1. **Validates prerequisites** — confirms you are on the release branch, the working tree is clean, and the remote history is up to date
 2. **Prompts for a target** (unless passed as an argument) — shows the computed next test and production versions
@@ -55,6 +62,8 @@ When you run `jvm-release-cli`, it:
 7. **Opens a GitHub release draft** — pre-filled with the generated changelog
 
 On any failure, the CLI automatically rolls back: the version commit is removed, the tag is deleted, and any in-progress merge is aborted.
+
+> **Hotfix releases:** The automated script is designed for regular releases from the main branch. For hotfix releases, follow the manual process. The CLI will warn you when it detects a `hotfix/*` branch.
 
 ## Configuration
 
