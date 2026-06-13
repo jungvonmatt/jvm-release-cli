@@ -75,7 +75,7 @@ const main = defineCommand({
       description: "Skip running tests",
       default: false,
     },
-    "changelog": {
+    changelog: {
       type: "boolean",
       description: "Generate and print the changelog without creating a release",
       default: false,
