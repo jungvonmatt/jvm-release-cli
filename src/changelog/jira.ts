@@ -32,8 +32,14 @@ export async function fetchJiraTickets(
     const jql = `key IN (${batch.join(",")})`;
     const baseHost = host.replace(/\/$/, "");
 
-    const fetchBatch = async (apiVersion: "3" | "2"): Promise<Response> => {
-      const apiUrl = `${baseHost}/rest/api/${apiVersion}/issue/search`;
+    // Jira Cloud: enhanced search at /rest/api/3/search/jql (the old /search is removed, returns 410)
+    // Jira Data Center / Server: classic search at /rest/api/2/search
+    const endpoints = [
+      `${baseHost}/rest/api/3/search/jql`,
+      `${baseHost}/rest/api/2/search`,
+    ];
+
+    const fetchBatch = async (apiUrl: string): Promise<Response> => {
       return fetch(apiUrl, {
         method: "POST",
         headers: {
@@ -50,11 +56,11 @@ export async function fetchJiraTickets(
     };
 
     try {
-      let response = await fetchBatch("3");
+      let response = await fetchBatch(endpoints[0]!);
 
-      // Jira Data Center / Server does not support v3 — fall back to v2
-      if (response.status === 410 || response.status === 404) {
-        response = await fetchBatch("2");
+      // Fall back to the classic endpoint if enhanced search is unavailable
+      if ([404, 405, 410].includes(response.status)) {
+        response = await fetchBatch(endpoints[1]!);
       }
 
       if (!response.ok) {
