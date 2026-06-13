@@ -29,6 +29,8 @@ import {
   abortMerge,
   getCurrentBranch,
   getPackageVersion,
+  getLatestTag,
+  getLatestReleaseTag,
   INITIAL_VERSION,
 } from "./git.ts";
 import { ui } from "./ui.ts";
@@ -73,6 +75,11 @@ const main = defineCommand({
       description: "Skip running tests",
       default: false,
     },
+    "changelog-only": {
+      type: "boolean",
+      description: "Generate and print the changelog without creating a release",
+      default: false,
+    },
   },
   async run({ args }) {
     try {
@@ -80,6 +87,20 @@ const main = defineCommand({
       const branch = args.branch;
       const preview = args.preview;
       const skipTests = args["no-tests"];
+      const changelogOnly = args["changelog-only"];
+
+      if (changelogOnly) {
+        const [latestTag, latestReleaseTag] = await Promise.all([
+          getLatestTag(),
+          getLatestReleaseTag(),
+        ]);
+        const fromTag = latestReleaseTag === INITIAL_VERSION ? latestTag : latestReleaseTag;
+        const range = fromTag === INITIAL_VERSION ? "HEAD" : `tags/${fromTag}...HEAD`;
+        const config = await loadChangelogConfig(ROOT);
+        const changelog = await generateChangelog(range, config);
+        console.log(changelog || "No changes detected.");
+        process.exit(0);
+      }
 
       // Context object to share state between tasks
       const ctx: ReleaseContext = {
