@@ -16,21 +16,7 @@ export async function loadChangelogConfig(cwd?: string): Promise<ChangelogConfig
       CHANGELOG_GITHUB_API_TOKEN: "githubToken",
     },
     required: isCI ? ["jiraBaseUrl"] : undefined,
-    prompt: isCI ? undefined : ["jiraBaseUrl", "ticketPattern"],
-    prompts: isCI
-      ? false
-      : [
-          {
-            type: "input",
-            name: "jiraBaseUrl",
-            message: "Jira base URL (e.g. https://myorg.atlassian.net)",
-          },
-          {
-            type: "input",
-            name: "ticketPattern",
-            message: "Ticket regex pattern (default: [A-Z]+-\\d+)",
-          },
-        ],
+    prompts: false,
     defaults: {
       ticketPattern: "[A-Z]+-\\d+",
     },
