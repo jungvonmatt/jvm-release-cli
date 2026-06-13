@@ -2,15 +2,15 @@
   "name": "jvm-release-cli",
   "version": "0.0.0",
   "description": "A general-purpose release preparation CLI for git-based projects.",
-  "homepage": "https://github.com/nicepkg/jvm-release-cli#readme",
+  "homepage": "https://github.com/jungvonmatt/jvm-release-cli#readme",
   "bugs": {
-    "url": "https://github.com/nicepkg/jvm-release-cli/issues"
+    "url": "https://github.com/jungvonmatt/jvm-release-cli/issues"
   },
   "license": "MIT",
   "author": "Benjamin Zoerb",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nicepkg/jvm-release-cli.git"
+    "url": "git+https://github.com/jungvonmatt/jvm-release-cli.git"
   },
   "bin": {
     "jvm-release-cli": "./dist/index.mjs"
