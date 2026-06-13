@@ -29,6 +29,7 @@ import {
   abortMerge,
   getCurrentBranch,
   getPackageVersion,
+  INITIAL_VERSION,
 } from "./git.ts";
 import { ui } from "./ui.ts";
 import { generateChangelog } from "./changelog/index.ts";
@@ -319,11 +320,11 @@ const main = defineCommand({
             title: "Generating changelog",
             task: async () => {
               const prereleaseTarget = preview ? "HEAD" : `tags/${ctx.version}`;
-              const releaseTarget = preview ? `tags/${latestTag}` : `tags/${ctx.version}`;
+              const releaseTarget = preview ? (latestTag === INITIAL_VERSION ? "HEAD" : `tags/${latestTag}`) : `tags/${ctx.version}`;
 
-              const range = ctx.isPrerelease
-                ? `tags/${latestTag}...${prereleaseTarget}`
-                : `tags/${latestReleaseTag}...${releaseTarget}`;
+              const fromTag = ctx.isPrerelease ? latestTag : latestReleaseTag;
+              const toRef = ctx.isPrerelease ? prereleaseTarget : releaseTarget;
+              const range = fromTag === INITIAL_VERSION ? toRef : `tags/${fromTag}...${toRef}`;
 
               const config = await loadChangelogConfig(ROOT);
               ctx.changelog = await generateChangelog(range, config);

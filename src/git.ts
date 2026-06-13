@@ -137,7 +137,7 @@ export const verifyRemoteHistoryIsClean = async (): Promise<void> => {
   }
 };
 
-const INITIAL_VERSION = "v0.0.0";
+export const INITIAL_VERSION = "v0.0.0";
 
 export const getLatestTag = async (): Promise<string> => {
   const { stdout } = await execa("git tag --sort=-v:refname | head -n 1");
