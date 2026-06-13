@@ -12,6 +12,7 @@
 // ============================================================================
 
 import { exec } from "node:child_process";
+import { resolve } from "node:path";
 import { promisify } from "node:util";
 import semver from "semver";
 import { defineCommand, runMain } from "citty";
@@ -80,6 +81,10 @@ const main = defineCommand({
       description: "Generate and print the changelog without creating a release",
       default: false,
     },
+    cwd: {
+      type: "string",
+      description: "Working directory to use (default: current directory)",
+    },
   },
   async run({ args }) {
     try {
@@ -88,6 +93,11 @@ const main = defineCommand({
       const preview = args.preview;
       const skipTests = args["no-tests"];
       const changelogOnly = args["changelog"];
+      const root = args.cwd ? resolve(args.cwd) : ROOT;
+
+      if (args.cwd) {
+        process.chdir(root);
+      }
 
       if (changelogOnly) {
         const [latestTag, latestReleaseTag] = await Promise.all([
@@ -96,7 +106,7 @@ const main = defineCommand({
         ]);
         const fromTag = latestReleaseTag === INITIAL_VERSION ? latestTag : latestReleaseTag;
         const range = fromTag === INITIAL_VERSION ? "HEAD" : `tags/${fromTag}...HEAD`;
-        const config = await loadChangelogConfig(ROOT);
+        const config = await loadChangelogConfig(root);
         const changelog = await generateChangelog(range, config);
         console.log(changelog || "No changes detected.");
         process.exit(0);
@@ -171,7 +181,7 @@ const main = defineCommand({
           // Try to get package version, but handle the case where package.json might be corrupted
           let currentPackageVersion: string | null;
           try {
-            currentPackageVersion = await getPackageVersion(ROOT);
+            currentPackageVersion = await getPackageVersion(root);
           } catch {
             currentPackageVersion = null;
           }
@@ -239,7 +249,7 @@ const main = defineCommand({
                 await execa("git switch main");
 
                 // Check if main's version is higher than the version we're trying to release
-                const mainVersion = await getPackageVersion(ROOT);
+                const mainVersion = await getPackageVersion(root);
                 if (semver.gt(mainVersion, pkgVersion)) {
                   const suggestedVersion = `v${semver.inc(mainVersion, "patch")}`;
                   throw new Error(
@@ -261,7 +271,7 @@ const main = defineCommand({
                 }
 
                 // verify the package.json version was updated
-                const packageVersion = await getPackageVersion(ROOT);
+                const packageVersion = await getPackageVersion(root);
                 if (semver.compare(packageVersion, version) !== 0) {
                   throw new Error(
                     `Failed to update package.json version. Expected ${version} but got ${packageVersion}`,
@@ -298,7 +308,7 @@ const main = defineCommand({
               }
 
               // verify the package.json version was updated
-              const packageVersion = await getPackageVersion(ROOT);
+              const packageVersion = await getPackageVersion(root);
               if (semver.compare(packageVersion, version) !== 0) {
                 throw new Error(
                   `Failed to update package.json version. Expected ${version} but got ${packageVersion}`,
@@ -351,7 +361,7 @@ const main = defineCommand({
               const toRef = ctx.isPrerelease ? prereleaseTarget : releaseTarget;
               const range = fromTag === INITIAL_VERSION ? toRef : `tags/${fromTag}...${toRef}`;
 
-              const config = await loadChangelogConfig(ROOT);
+              const config = await loadChangelogConfig(root);
               ctx.changelog = await generateChangelog(range, config);
 
               if (!ctx.changelog) {
