@@ -52,8 +52,8 @@ export function formatChangelog(
       } else {
         // Ticket key found in commits but not in Jira (no credentials or API error)
         const fallbackGroup = grouped.get("Unknown") ?? [];
-        fallbackGroup.push({ key, summary: key, type: "Unknown", assignee: null });
-        grouped.set("Unknown", fallbackGroup);
+        fallbackGroup.push({ key, summary: key, type: "Tickets", assignee: null });
+        grouped.set("Tickets", fallbackGroup);
       }
     }
 
@@ -72,9 +72,11 @@ export function formatChangelog(
       sections.push(`## ${type}\n`);
 
       for (const ticket of group) {
-        const link = `${config.jiraBaseUrl.replace(/\/$/, "")}/browse/${ticket.key}`;
+        const baseUrl = config.jiraBaseUrl?.replace(/\/$/, "");
+        const ticketRef = baseUrl ? `[${ticket.key}](${baseUrl}/browse/${ticket.key})` : ticket.key;
         const assigneeStr = ticket.assignee ? ` (${ticket.assignee})` : "";
-        sections.push(`- [${ticket.key}](${link}) ${ticket.summary}${assigneeStr}`);
+        const summary = ticket.summary !== ticket.key ? ` ${ticket.summary}` : "";
+        sections.push(`- ${ticketRef}${summary}${assigneeStr}`);
       }
 
       sections.push("");

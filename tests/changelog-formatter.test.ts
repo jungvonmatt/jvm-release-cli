@@ -75,6 +75,6 @@ describe("formatChangelog", () => {
 
     const result = formatChangelog(nodes, tickets, ["CPP-99"], baseConfig);
     expect(result).toContain("CPP-99");
-    expect(result).toContain("## Unknown");
+    expect(result).toContain("## Tickets");
   });
 });

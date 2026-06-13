@@ -30,10 +30,11 @@ export async function fetchJiraTickets(
 
   for (const batch of batches) {
     const jql = `key IN (${batch.join(",")})`;
-    const apiUrl = `${host.replace(/\/$/, "")}/rest/api/3/search`;
+    const baseHost = host.replace(/\/$/, "");
 
-    try {
-      const response = await fetch(apiUrl, {
+    const fetchBatch = async (apiVersion: "3" | "2"): Promise<Response> => {
+      const apiUrl = `${baseHost}/rest/api/${apiVersion}/search`;
+      return fetch(apiUrl, {
         method: "POST",
         headers: {
           Authorization: `Basic ${btoa(`${email}:${token}`)}`,
@@ -46,6 +47,15 @@ export async function fetchJiraTickets(
           maxResults: batch.length,
         }),
       });
+    };
+
+    try {
+      let response = await fetchBatch("3");
+
+      // Jira Data Center / Server does not support v3 — fall back to v2
+      if (response.status === 410 || response.status === 404) {
+        response = await fetchBatch("2");
+      }
 
       if (!response.ok) {
         console.warn(`⚠️  Jira API returned ${response.status}. Falling back to raw ticket IDs.`);
