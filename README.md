@@ -60,17 +60,17 @@ On any failure, the CLI automatically rolls back: the version commit is removed,
 
 Create one of the following config files (resolved by `@jungvonmatt/config-loader`):
 
-| File | Format |
-| ---- | ------ |
-| `"release-cli"` key in `package.json` | JSON |
-| `.release-clirc.json` | JSON |
-| `release-cli.config.ts` | TypeScript |
+| File                                  | Format     |
+| ------------------------------------- | ---------- |
+| `"release-cli"` key in `package.json` | JSON       |
+| `.release-clirc.json`                 | JSON       |
+| `release-cli.config.ts`               | TypeScript |
 
 **Minimal config:**
 
 ```jsonc
 {
-  "jiraBaseUrl": "https://myorg.atlassian.net"
+  "jiraBaseUrl": "https://myorg.atlassian.net",
 }
 ```
 
@@ -92,7 +92,7 @@ Create one of the following config files (resolved by `@jungvonmatt/config-loade
   "ticketPattern": "((PROJ|TEAM)-[0-9]{3,})",
 
   // Optional: GitHub personal access token (reserved for future PR enrichment)
-  "githubToken": "ghp_..."
+  "githubToken": "ghp_...",
 }
 ```
 
@@ -100,13 +100,13 @@ Create one of the following config files (resolved by `@jungvonmatt/config-loade
 
 All config values can be provided via environment variables. This is the recommended approach for CI.
 
-| Environment variable         | Config key      | Description                                        |
-| ---------------------------- | --------------- | -------------------------------------------------- |
-| `CHANGELOG_JIRA_BASEURL`     | `jiraBaseUrl`   | Jira base URL                                      |
-| `CHANGELOG_JIRA_API_HOST`    | `jiraApiHost`   | Jira API host (defaults to `jiraBaseUrl`)          |
-| `CHANGELOG_JIRA_API_EMAIL`   | `jiraApiEmail`  | Jira API email for Basic Auth                      |
-| `CHANGELOG_JIRA_API_TOKEN`   | `jiraApiToken`  | Jira API token for Basic Auth                      |
-| `CHANGELOG_GITHUB_API_TOKEN` | `githubToken`   | GitHub token (optional, for future PR enrichment)  |
+| Environment variable         | Config key     | Description                                       |
+| ---------------------------- | -------------- | ------------------------------------------------- |
+| `CHANGELOG_JIRA_BASEURL`     | `jiraBaseUrl`  | Jira base URL                                     |
+| `CHANGELOG_JIRA_API_HOST`    | `jiraApiHost`  | Jira API host (defaults to `jiraBaseUrl`)         |
+| `CHANGELOG_JIRA_API_EMAIL`   | `jiraApiEmail` | Jira API email for Basic Auth                     |
+| `CHANGELOG_JIRA_API_TOKEN`   | `jiraApiToken` | Jira API token for Basic Auth                     |
+| `CHANGELOG_GITHUB_API_TOKEN` | `githubToken`  | GitHub token (optional, for future PR enrichment) |
 
 **Behavior by environment:**
 
