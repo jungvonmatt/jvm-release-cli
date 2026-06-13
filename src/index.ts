@@ -75,7 +75,7 @@ const main = defineCommand({
       description: "Skip running tests",
       default: false,
     },
-    "changelog-only": {
+    "changelog": {
       type: "boolean",
       description: "Generate and print the changelog without creating a release",
       default: false,
@@ -87,7 +87,7 @@ const main = defineCommand({
       const branch = args.branch;
       const preview = args.preview;
       const skipTests = args["no-tests"];
-      const changelogOnly = args["changelog-only"];
+      const changelogOnly = args["changelog"];
 
       if (changelogOnly) {
         const [latestTag, latestReleaseTag] = await Promise.all([
