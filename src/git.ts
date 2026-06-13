@@ -75,6 +75,10 @@ export const verifyCurrentBranchIsReleaseBranch = async (releaseBranch: string):
  * Gets a single-line commit log (subject + abbreviated hash), starting after `revision`.
  */
 export const commitLogFromRevision = async (revision: string): Promise<string> => {
+  if (revision === INITIAL_VERSION) {
+    const { stdout } = await execa(`git log --format="%s %h"`);
+    return stdout.trim();
+  }
   const { stdout } = await execa(`git log --format="%s %h" ${revision}..HEAD`);
   return stdout.trim();
 };
@@ -133,16 +137,18 @@ export const verifyRemoteHistoryIsClean = async (): Promise<void> => {
   }
 };
 
+const INITIAL_VERSION = "v0.0.0";
+
 export const getLatestTag = async (): Promise<string> => {
   const { stdout } = await execa("git tag --sort=-v:refname | head -n 1");
-  return stdout.trim();
+  return stdout.trim() || INITIAL_VERSION;
 };
 
 export const getLatestReleaseTag = async (): Promise<string> => {
   const { stdout } = await execa(
     'git tag --sort=-v:refname | grep -E "^v?[0-9]+.[0-9]+.[0-9]+$" | head -n 1',
   );
-  return stdout.trim();
+  return stdout.trim() || INITIAL_VERSION;
 };
 
 export const hasTag = async (tag: string): Promise<boolean> => {

@@ -375,4 +375,11 @@ const main = defineCommand({
   },
 });
 
-void runMain(main);
+runMain(main).catch((err: unknown) => {
+  // @inquirer/prompts throws "User force closed the prompt with SIGINT" on Ctrl+C
+  if (err instanceof Error && /force closed|SIGINT/i.test(err.message)) {
+    console.log("");
+    process.exit(130);
+  }
+  throw err;
+});
