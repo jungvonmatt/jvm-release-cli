@@ -33,7 +33,7 @@ export async function fetchJiraTickets(
     const baseHost = host.replace(/\/$/, "");
 
     const fetchBatch = async (apiVersion: "3" | "2"): Promise<Response> => {
-      const apiUrl = `${baseHost}/rest/api/${apiVersion}/search`;
+      const apiUrl = `${baseHost}/rest/api/${apiVersion}/issue/search`;
       return fetch(apiUrl, {
         method: "POST",
         headers: {
