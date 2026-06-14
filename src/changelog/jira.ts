@@ -34,10 +34,7 @@ export async function fetchJiraTickets(
 
     // Jira Cloud: enhanced search at /rest/api/3/search/jql (the old /search is removed, returns 410)
     // Jira Data Center / Server: classic search at /rest/api/2/search
-    const endpoints = [
-      `${baseHost}/rest/api/3/search/jql`,
-      `${baseHost}/rest/api/2/search`,
-    ];
+    const endpoints = [`${baseHost}/rest/api/3/search/jql`, `${baseHost}/rest/api/2/search`];
 
     const fetchBatch = async (apiUrl: string): Promise<Response> => {
       return fetch(apiUrl, {
