@@ -16,6 +16,21 @@ afterEach(() => {
 });
 
 describe("loadChangelogConfig", () => {
+  test("maps the environment variables to config keys", async () => {
+    mockConfig({});
+
+    await loadChangelogConfig();
+
+    expect(loadConfigMock.mock.calls[0]![0].envMap).toEqual({
+      CHANGELOG_JIRA_API_HOST: "jiraApiHost",
+      CHANGELOG_JIRA_API_EMAIL: "jiraApiEmail",
+      CHANGELOG_JIRA_API_TOKEN: "jiraApiToken",
+      CHANGELOG_JIRA_BASEURL: "jiraBaseUrl",
+      CHANGELOG_GITHUB_API_TOKEN: "githubToken",
+      CHANGELOG_GITLAB_API_TOKEN: "gitlabToken",
+    });
+  });
+
   test("adds https:// to a bare Jira host", async () => {
     mockConfig({ jiraBaseUrl: "myorg.atlassian.net", jiraApiHost: "myorg.atlassian.net" });
 

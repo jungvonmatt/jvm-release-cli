@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/test";
-import { fetchJiraTickets } from "../src/changelog/jira.ts";
+import { fetchJiraTickets, verifyJiraCredentials } from "../src/changelog/jira.ts";
 import type { ChangelogConfig } from "../src/changelog/types.ts";
 
 const config: ChangelogConfig = {
@@ -11,6 +11,7 @@ const config: ChangelogConfig = {
 const fetchMock = vi.fn();
 
 beforeEach(() => {
+  fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
@@ -59,5 +60,44 @@ describe("fetchJiraTickets", () => {
     expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining("Jira returned none of the 2 tickets"),
     );
+  });
+});
+
+test("fetchJiraTickets names jvm-release init when credentials are missing", async () => {
+  await fetchJiraTickets(["LEV-1"], { jiraBaseUrl: config.jiraBaseUrl });
+  expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("jvm-release init"));
+});
+
+describe("verifyJiraCredentials", () => {
+  test("calls /myself with Basic auth and returns true on success", async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200 });
+    expect(await verifyJiraCredentials(config)).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://myorg.atlassian.net/rest/api/2/myself",
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: `Basic ${btoa("me@myorg.com:token")}` }),
+      }),
+    );
+  });
+
+  test("uses jiraApiHost when set", async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200 });
+    await verifyJiraCredentials({ ...config, jiraApiHost: "https://api.example.com/" });
+    expect(fetchMock.mock.calls[0]![0]).toBe("https://api.example.com/rest/api/2/myself");
+  });
+
+  test("returns false on 401", async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 401 });
+    expect(await verifyJiraCredentials(config)).toBe(false);
+  });
+
+  test("returns false when the request fails", async () => {
+    fetchMock.mockRejectedValue(new Error("ECONNREFUSED"));
+    expect(await verifyJiraCredentials(config)).toBe(false);
+  });
+
+  test("returns false without a request when credentials are missing", async () => {
+    expect(await verifyJiraCredentials({ jiraBaseUrl: config.jiraBaseUrl })).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,30 @@
 import type { JiraTicket, ChangelogConfig } from "./types.ts";
 
 /**
+ * Checks the Jira credentials with `GET /rest/api/2/myself`, which Jira Cloud and Data Center
+ * both serve. Returns `false` if credentials are missing, rejected or Jira is unreachable.
+ */
+export async function verifyJiraCredentials(config: ChangelogConfig): Promise<boolean> {
+  const host = config.jiraApiHost ?? config.jiraBaseUrl;
+  const email = config.jiraApiEmail;
+  const token = config.jiraApiToken;
+
+  if (!host || !email || !token) return false;
+
+  try {
+    const response = await fetch(`${host.replace(/\/$/, "")}/rest/api/2/myself`, {
+      headers: {
+        Authorization: `Basic ${btoa(`${email}:${token}`)}`,
+        Accept: "application/json",
+      },
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Fetches ticket metadata from Jira via bulk JQL search.
  * Returns a Map of ticket key → JiraTicket.
  * Falls back gracefully (returns empty map) if credentials are missing or API fails.
@@ -18,7 +42,9 @@ export async function fetchJiraTickets(
   const token = config.jiraApiToken;
 
   if (!host || !email || !token) {
-    console.warn("⚠️  Jira credentials not configured. Falling back to raw commit summaries.");
+    console.warn(
+      "⚠️  Jira credentials not configured. Falling back to raw commit summaries. Run `jvm-release init` to set them up.",
+    );
     return result;
   }
 

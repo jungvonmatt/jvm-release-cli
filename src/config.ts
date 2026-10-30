@@ -5,7 +5,20 @@ import type { ChangelogConfig } from "./changelog/types.ts";
  * Adds `https://` to a bare host such as `myorg.atlassian.net`.
  * `jira-changelog` configs set the Jira API host without a protocol.
  */
-const withProtocol = (url: string): string => (/^https?:\/\//i.test(url) ? url : `https://${url}`);
+export const withProtocol = (url: string): string =>
+  /^https?:\/\//i.test(url) ? url : `https://${url}`;
+
+export const DEFAULT_TICKET_PATTERN = "[A-Z]+-\\d+";
+
+/** Environment variable for each config key. A `.env` file in the working directory is loaded too. */
+export const ENV_VARS = {
+  jiraApiHost: "CHANGELOG_JIRA_API_HOST",
+  jiraApiEmail: "CHANGELOG_JIRA_API_EMAIL",
+  jiraApiToken: "CHANGELOG_JIRA_API_TOKEN",
+  jiraBaseUrl: "CHANGELOG_JIRA_BASEURL",
+  githubToken: "CHANGELOG_GITHUB_API_TOKEN",
+  gitlabToken: "CHANGELOG_GITLAB_API_TOKEN",
+} as const satisfies Partial<Record<keyof ChangelogConfig, string>>;
 
 export async function loadChangelogConfig(cwd?: string): Promise<ChangelogConfig> {
   const isCI = Boolean(process.env.CI);
@@ -14,18 +27,11 @@ export async function loadChangelogConfig(cwd?: string): Promise<ChangelogConfig
   const result = await loadConfig<any>({
     name: "release-cli",
     cwd,
-    envMap: {
-      CHANGELOG_JIRA_API_HOST: "jiraApiHost",
-      CHANGELOG_JIRA_API_EMAIL: "jiraApiEmail",
-      CHANGELOG_JIRA_API_TOKEN: "jiraApiToken",
-      CHANGELOG_JIRA_BASEURL: "jiraBaseUrl",
-      CHANGELOG_GITHUB_API_TOKEN: "githubToken",
-      CHANGELOG_GITLAB_API_TOKEN: "gitlabToken",
-    },
+    envMap: Object.fromEntries(Object.entries(ENV_VARS).map(([key, envVar]) => [envVar, key])),
     required: isCI ? ["jiraBaseUrl"] : undefined,
     prompts: false,
     defaults: {
-      ticketPattern: "[A-Z]+-\\d+",
+      ticketPattern: DEFAULT_TICKET_PATTERN,
     },
   });
 
