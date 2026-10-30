@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   getRemoteRepository: vi.fn(),
   getRecentCommitMessages: vi.fn(),
   isGitIgnored: vi.fn(),
+  isGitTracked: vi.fn(),
   loadChangelogConfig: vi.fn(),
   verifyJiraCredentials: vi.fn(),
   isCliLoggedIn: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock("../src/git.ts", async (importOriginal) => ({
   getRemoteRepository: mocks.getRemoteRepository,
   getRecentCommitMessages: mocks.getRecentCommitMessages,
   isGitIgnored: mocks.isGitIgnored,
+  isGitTracked: mocks.isGitTracked,
 }));
 vi.mock("../src/config.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/config.ts")>()),
@@ -55,6 +57,7 @@ beforeEach(async () => {
   mocks.getRemoteRepository.mockResolvedValue({ host: "github.com", path: "o/r" });
   mocks.getRecentCommitMessages.mockResolvedValue("");
   mocks.isGitIgnored.mockResolvedValue(true);
+  mocks.isGitTracked.mockResolvedValue(false);
   mocks.loadChangelogConfig.mockResolvedValue({ ticketPattern: DEFAULT_TICKET_PATTERN });
   mocks.verifyJiraCredentials.mockResolvedValue(true);
   mocks.isCliLoggedIn.mockResolvedValue(false);
@@ -116,6 +119,43 @@ describe("runInit", () => {
     await runInit(dir);
 
     expect((await readdir(dir)).sort()).toEqual([RC_FILE]);
+  });
+
+  test("writes no secrets into a .env that git tracks", async () => {
+    await writeFile(join(dir, ".env"), "FOO=1\n");
+    mocks.isGitTracked.mockResolvedValue(true);
+    mocks.isGitIgnored.mockResolvedValue(false);
+    prompts.input
+      .mockResolvedValueOnce("https://x.atlassian.net")
+      .mockResolvedValueOnce("(LEV-\\d+)")
+      .mockResolvedValueOnce("me@x.com");
+    prompts.confirm.mockResolvedValueOnce(true).mockResolvedValueOnce(true);
+    prompts.password.mockResolvedValueOnce("s3cret");
+
+    await runInit(dir);
+
+    expect(prompts.confirm).toHaveBeenCalledTimes(1);
+    expect(await readFile(join(dir, ".env"), "utf8")).toBe("FOO=1\n");
+    expect(await readdir(dir)).not.toContain(".gitignore");
+  });
+
+  test("trims pasted answers", async () => {
+    prompts.input
+      .mockResolvedValueOnce(" https://x.atlassian.net \n")
+      .mockResolvedValueOnce("(LEV-\\d+) ")
+      .mockResolvedValueOnce(" me@x.com ");
+    prompts.confirm.mockResolvedValueOnce(true);
+    prompts.password.mockResolvedValueOnce("s3cret ");
+
+    await runInit(dir);
+
+    expect(await readRc()).toEqual({
+      jiraBaseUrl: "https://x.atlassian.net",
+      ticketPattern: "(LEV-\\d+)",
+    });
+    expect(await readFile(join(dir, ".env"), "utf8")).toBe(
+      "CHANGELOG_JIRA_API_EMAIL='me@x.com'\nCHANGELOG_JIRA_API_TOKEN='s3cret'\n",
+    );
   });
 
   test("stops without prompts when a config exists", async () => {

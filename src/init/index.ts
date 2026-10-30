@@ -13,6 +13,7 @@ import {
   getRecentCommitMessages,
   getRemoteRepository,
   isGitIgnored,
+  isGitTracked,
 } from "../git.ts";
 import { DEFAULT_TICKET_PATTERN, ENV_VARS, loadChangelogConfig, withProtocol } from "../config.ts";
 import { verifyJiraCredentials } from "../changelog/jira.ts";
@@ -47,18 +48,22 @@ export async function runInit(cwd: string): Promise<void> {
   const detected = repo ? detectProvider(repo.host) : null;
 
   const jiraBaseUrl = withProtocol(
-    await input({
-      message: "Jira base URL (e.g. https://myorg.atlassian.net)",
-      default: current.jiraBaseUrl,
-      required: true,
-    }),
+    (
+      await input({
+        message: "Jira base URL (e.g. https://myorg.atlassian.net)",
+        default: current.jiraBaseUrl,
+        required: true,
+      })
+    ).trim(),
   );
 
-  const ticketPattern = await input({
-    message: "Ticket pattern (regex)",
-    default: inferTicketPattern(await getRecentCommitMessages()) ?? DEFAULT_TICKET_PATTERN,
-    validate: (value) => isValidRegExp(value) || "Enter a valid regular expression.",
-  });
+  const ticketPattern = (
+    await input({
+      message: "Ticket pattern (regex)",
+      default: inferTicketPattern(await getRecentCommitMessages()) ?? DEFAULT_TICKET_PATTERN,
+      validate: (value) => isValidRegExp(value.trim()) || "Enter a valid regular expression.",
+    })
+  ).trim();
 
   const gitProvider =
     repo && !detected
@@ -81,16 +86,16 @@ export async function runInit(cwd: string): Promise<void> {
       default: true,
     }))
   ) {
-    const email = await input({
-      message: "Jira account email",
-      default: current.jiraApiEmail,
-      required: true,
-    });
-    const token = await password({
-      message: "Jira API token",
-      mask: true,
-      validate: (value) => value.length > 0 || "Enter the API token.",
-    });
+    const email = (
+      await input({ message: "Jira account email", default: current.jiraApiEmail, required: true })
+    ).trim();
+    const token = (
+      await password({
+        message: "Jira API token",
+        mask: true,
+        validate: (value) => value.trim().length > 0 || "Enter the API token.",
+      })
+    ).trim();
 
     const accepted = await verifyJiraCredentials({
       jiraBaseUrl,
@@ -104,8 +109,11 @@ export async function runInit(cwd: string): Promise<void> {
         : pc.yellow("⚠️  Jira rejected the credentials or is unreachable. Continuing anyway."),
     );
 
-    const envIgnored = await isGitIgnored(".env");
+    // A tracked `.env` stays tracked even when `.gitignore` lists it, so it never gets secrets
+    const envTracked = await isGitTracked(".env");
+    const envIgnored = !envTracked && (await isGitIgnored(".env"));
     addEnvToGitignore =
+      !envTracked &&
       !envIgnored &&
       (await confirm({ message: ".env is not git-ignored. Add it to .gitignore?", default: true }));
 
@@ -113,8 +121,11 @@ export async function runInit(cwd: string): Promise<void> {
       if (email !== current.jiraApiEmail) secrets[ENV_VARS.jiraApiEmail] = email;
       if (token !== current.jiraApiToken) secrets[ENV_VARS.jiraApiToken] = token;
     } else {
+      const reason = envTracked ? "git tracks .env, so the credentials stay out of it. " : "";
       console.log(
-        pc.dim(`Set ${ENV_VARS.jiraApiEmail} and ${ENV_VARS.jiraApiToken} in your environment.`),
+        pc.dim(
+          `${reason}Set ${ENV_VARS.jiraApiEmail} and ${ENV_VARS.jiraApiToken} in your environment.`,
+        ),
       );
     }
   }

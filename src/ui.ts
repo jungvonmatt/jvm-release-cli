@@ -6,6 +6,22 @@ import { getLatestReleaseTag, getLatestTag, commitLogFromRevision } from "./git.
 import type { ReleaseTarget, ReleaseSelection } from "./types.ts";
 
 /**
+ * Validates the `target` argument. `ui()` treats any target other than `test` as production,
+ * so an unknown value must stop the CLI.
+ */
+export const parseReleaseTarget = (value: string | undefined): ReleaseTarget | undefined => {
+  if (!value) return undefined;
+  if (value === "test" || value === "production") return value;
+
+  // citty reads `init` as the target when a flag comes first, e.g. `jvm-release --cwd x init`
+  const hint =
+    value === "init"
+      ? " To create a config, put the flags after init: jvm-release init --cwd <dir>."
+      : "";
+  throw new Error(`Unknown release target "${value}". Use "test" or "production".${hint}`);
+};
+
+/**
  * Detects the error `@inquirer/prompts` throws when the user presses Ctrl+C.
  */
 export const isPromptCancel = (error: unknown): boolean =>

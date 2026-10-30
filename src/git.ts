@@ -107,7 +107,19 @@ const isWorkingTreeClean = async (): Promise<boolean> => {
 };
 
 /**
- * Checks whether git ignores `path`. Also `false` outside a git repository.
+ * Checks whether git tracks `path`. A tracked file stays tracked even when `.gitignore` lists it.
+ */
+export const isGitTracked = async (path: string): Promise<boolean> => {
+  try {
+    await execa(`git ls-files --error-unmatch -- "${path}"`);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Checks whether git ignores `path`. Also `false` outside a git repository, and for tracked files.
  */
 export const isGitIgnored = async (path: string): Promise<boolean> => {
   try {

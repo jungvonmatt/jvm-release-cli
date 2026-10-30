@@ -30,13 +30,13 @@ import {
   getLatestReleaseTag,
   INITIAL_VERSION,
 } from "./git.ts";
-import { isPromptCancel, ui } from "./ui.ts";
+import { isPromptCancel, parseReleaseTarget, ui } from "./ui.ts";
 import { generateChangelog } from "./changelog/index.ts";
 import { loadChangelogConfig } from "./config.ts";
 import { init } from "./init/index.ts";
 import { getReleasePage } from "./release-page.ts";
 import type { ChangelogConfig } from "./changelog/types.ts";
-import type { ReleaseTarget, ReleaseContext } from "./types.ts";
+import type { ReleaseContext } from "./types.ts";
 
 const ROOT = process.cwd();
 const execa = promisify(exec);
@@ -89,7 +89,7 @@ const main = defineCommand({
   },
   async run({ args }) {
     try {
-      const releaseTarget = (args.target as ReleaseTarget) || undefined;
+      const releaseTarget = parseReleaseTarget(args.target);
       const branch = args.branch;
       const preview = args.preview;
       const skipTests = !args.tests;
