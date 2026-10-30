@@ -53,6 +53,8 @@ export interface ChangelogConfig {
   pullRequests?: boolean;
   /** Lists only tickets that are linked to a pull/merge request */
   onlyTicketsWithPullRequest?: boolean;
+  /** Source branches of back-merge PRs, which are ignored (default: main, master, production, release) */
+  backMergeBranches?: string[];
 }
 
 export interface ChangelogOptions {

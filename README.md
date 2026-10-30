@@ -116,6 +116,10 @@ Create one of the following config files (resolved by `@jungvonmatt/config-loade
 
   // Optional: list only tickets that are linked to a pull/merge request (default: false)
   "onlyTicketsWithPullRequest": false,
+
+  // Optional: source branches of back-merge pull/merge requests, which are ignored
+  // (default: ["main", "master", "production", "release"])
+  "backMergeBranches": ["main", "master", "production", "release"],
 }
 ```
 
@@ -179,7 +183,7 @@ Markdown formatter
 | GitHub   | `Merge pull request #12 from …`                | subject ends `(#12)` |
 | GitLab   | body line `See merge request group/project!12` | subject ends `(!12)` |
 
-It loads each request once, with the token from the config or with `gh api` / `glab api`. Each ticket line then gets the request links and the authors' handles (for example `([#12](…)) @alice`). The handles replace the Jira assignee. A commit without a ticket is listed by its request title. Commits from fast-forward merges have no request number, so they get no link. If a lookup fails, the changelog is still generated and the CLI prints one warning.
+It loads each request once, with the token from the config or with `gh api` / `glab api`. Each ticket line then gets the request links and the authors' handles (for example `([#12](…)) @alice`). The handles replace the Jira assignee. A commit with a ticket appears only on that ticket's line. A commit without a ticket is listed once under "Other Commits", by its request title. A back-merge request (source branch in `backMergeBranches`, for example `production` into `main`) is ignored: it adds no link, no handle and no "Other Commits" entry. Commits from fast-forward merges have no request number, so they get no link. If a lookup fails, the changelog is still generated and the CLI prints one warning.
 
 **Revert handling:** a commit reverted an odd number of times is excluded; reverted an even number of times (i.e. the revert itself was reverted) it is kept.
 

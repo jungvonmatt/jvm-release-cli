@@ -11,6 +11,9 @@ const CONCURRENCY = 6;
 
 const GITHUB_API_VERSION = "2022-11-28";
 
+/** Source branches of back-merge PRs, e.g. `production` merged back into `main`. */
+export const DEFAULT_BACK_MERGE_BRANCHES = ["main", "master", "production", "release"];
+
 export interface PullRequestClient {
   provider: GitProvider;
   get: (number: number) => Promise<PullRequest>;
@@ -194,10 +197,14 @@ async function mapWithLimit<T, R>(
  * The PR title and source branch are added to `fullText`, so ticket keys that appear only
  * there are found too. The PR description is left out because it often mentions related tickets.
  * Failed lookups are skipped and reported in one warning.
+ *
+ * A back-merge PR (source branch in `backMergeBranches`) is not attached: it only carries
+ * changes that were released before, so it adds no links, authors or "Other Commits" entry.
  */
 export async function attachPullRequests(
   nodes: GraphNode[],
   client: PullRequestClient,
+  backMergeBranches: string[] = DEFAULT_BACK_MERGE_BRANCHES,
 ): Promise<GraphNode[]> {
   const numberByHash = new Map<string, number>();
   for (const node of nodes) {
@@ -228,7 +235,7 @@ export async function attachPullRequests(
   return nodes.map((node) => {
     const number = numberByHash.get(node.commit.hash);
     const pullRequest = number === undefined ? undefined : loaded.get(number);
-    if (!pullRequest) return node;
+    if (!pullRequest || backMergeBranches.includes(pullRequest.sourceBranch)) return node;
 
     return {
       ...node,

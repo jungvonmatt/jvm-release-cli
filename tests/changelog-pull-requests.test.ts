@@ -302,4 +302,27 @@ describe("attachPullRequests", () => {
     expect(console.warn).toHaveBeenCalledTimes(1);
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("#2, #3"));
   });
+
+  test("ignores back-merge PRs from the default long-lived branches", async () => {
+    const get = vi.fn(async (n: number) => pr(n, "Back-merge production", "production"));
+    const nodes = [makeNode("Merge pull request #880 from acme/production")];
+
+    const [node] = await attachPullRequests(nodes, { provider: "github", get });
+
+    expect(node!.pullRequest).toBeUndefined();
+    expect(node!.fullText).not.toContain("Back-merge production");
+  });
+
+  test("uses the configured back-merge branches", async () => {
+    const get = vi.fn(async (n: number) =>
+      n === 1
+        ? pr(n, "Promote staging", "staging")
+        : pr(n, "Release from production", "production"),
+    );
+    const nodes = [makeNode("One (#1)"), makeNode("Two (#2)")];
+
+    const result = await attachPullRequests(nodes, { provider: "github", get }, ["staging"]);
+
+    expect(result.map((n) => n.pullRequest?.number)).toEqual([undefined, 2]);
+  });
 });

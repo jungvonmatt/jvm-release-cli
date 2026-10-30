@@ -23,7 +23,7 @@ export async function generateChangelog(range: string, config: ChangelogConfig):
 
   // 3. Attach GitHub pull requests / GitLab merge requests (graceful fallback)
   const client = config.pullRequests === false ? null : await createPullRequestClient(config);
-  const nodes = client ? await attachPullRequests(graph, client) : graph;
+  const nodes = client ? await attachPullRequests(graph, client, config.backMergeBranches) : graph;
 
   // 4. Extract ticket IDs from consolidated text
   const pattern = config.ticketPattern ?? "[A-Z]+-\\d+";

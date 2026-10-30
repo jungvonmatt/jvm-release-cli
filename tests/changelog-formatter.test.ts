@@ -171,4 +171,44 @@ describe("formatChangelog with pull requests", () => {
     expect(result).toContain("PROJ-1");
     expect(result).not.toContain("PROJ-2");
   });
+
+  test("lists a PR merge with a ticket only on the ticket line, never under Other Commits", () => {
+    const nodes = [
+      // Ticket in the nested branch commits
+      withPr(
+        makeNode(
+          "aaa",
+          "Merge pull request #12 from acme/basket",
+          "Merge pull request #12 from acme/basket\nPROJ-1 add basket\nAdd basket",
+        ),
+        pr(12, "Add basket"),
+      ),
+      // Ticket only in the PR title (added to fullText by attachPullRequests)
+      withPr(
+        makeNode(
+          "bbb",
+          "Merge pull request #13 from acme/totals",
+          "Merge pull request #13 from acme/totals\nfix totals\nPROJ-2 Fix totals",
+        ),
+        pr(13, "PROJ-2 Fix totals"),
+      ),
+    ];
+
+    const result = formatChangelog(nodes, new Map(), ["PROJ-1", "PROJ-2"], baseConfig);
+
+    expect(result).not.toContain("## Other Commits");
+    expect(result.match(/\[#12\]/g)).toHaveLength(1);
+    expect(result.match(/\[#13\]/g)).toHaveLength(1);
+  });
+
+  test("lists a ticket-less PR once when several commits point to it", () => {
+    const nodes = [
+      withPr(makeNode("aaa", "Fix vue warnings (#14)"), pr(14, "Fix vue warnings")),
+      withPr(makeNode("bbb", "Fix vue warnings again (#14)"), pr(14, "Fix vue warnings")),
+    ];
+
+    const result = formatChangelog(nodes, new Map(), [], baseConfig);
+
+    expect(result.match(/Fix vue warnings/g)).toHaveLength(1);
+  });
 });

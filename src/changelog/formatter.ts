@@ -117,10 +117,13 @@ export function formatChangelog(
   }
 
   // "Other Commits" section: commits without any ticket reference.
-  // A merge commit with a known PR is not noise: it is listed by its PR title.
+  // A merge commit with a known PR is not noise: it is listed by its PR title, once per PR.
+  const listedPullRequests = new Set<number>();
   const otherCommits = nodes.filter((node) => {
     if (ticketsByNode.get(node)!.length > 0) return false;
-    if (!node.pullRequest && isNoiseCommit(node.commit.subject)) return false;
+    if (!node.pullRequest) return !isNoiseCommit(node.commit.subject);
+    if (listedPullRequests.has(node.pullRequest.number)) return false;
+    listedPullRequests.add(node.pullRequest.number);
     return true;
   });
 
