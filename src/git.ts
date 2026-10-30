@@ -84,10 +84,47 @@ export const commitLogFromRevision = async (revision: string): Promise<string> =
   return stdout.trim();
 };
 
+/**
+ * Gets subject and body of the last `limit` commits. Returns an empty string in a repository
+ * without commits.
+ */
+export const getRecentCommitMessages = async (limit = 500): Promise<string> => {
+  try {
+    const { stdout } = await execa(`git log -n ${limit} --format="%s%n%b"`);
+    return stdout.trim();
+  } catch {
+    return "";
+  }
+};
+
 const isWorkingTreeClean = async (): Promise<boolean> => {
   try {
     const { stdout } = await execa("git status --porcelain");
     return stdout.trim() === "";
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Checks whether git tracks `path`. A tracked file stays tracked even when `.gitignore` lists it.
+ */
+export const isGitTracked = async (path: string): Promise<boolean> => {
+  try {
+    await execa(`git ls-files --error-unmatch -- "${path}"`);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Checks whether git ignores `path`. Also `false` outside a git repository, and for tracked files.
+ */
+export const isGitIgnored = async (path: string): Promise<boolean> => {
+  try {
+    await execa(`git check-ignore -q "${path}"`);
+    return true;
   } catch {
     return false;
   }

@@ -311,3 +311,33 @@ describe("getRemoteRepository", () => {
     await expect(getRemoteRepository()).resolves.toBeNull();
   });
 });
+
+describe("getRecentCommitMessages", () => {
+  test("reads subject and body of the last commits", async () => {
+    mockExec("LEV-1 fix\n\nbody\n");
+    const { getRecentCommitMessages } = await import("../src/git.ts");
+    expect(await getRecentCommitMessages(500)).toBe("LEV-1 fix\n\nbody");
+    expect(execMock.mock.calls[0]![0]).toBe('git log -n 500 --format="%s%n%b"');
+  });
+
+  test("returns an empty string in a repository without commits", async () => {
+    mockExecError(new Error("fatal: your current branch 'main' does not have any commits yet"));
+    const { getRecentCommitMessages } = await import("../src/git.ts");
+    expect(await getRecentCommitMessages()).toBe("");
+  });
+});
+
+describe("isGitIgnored", () => {
+  test("is true when git check-ignore matches", async () => {
+    mockExec("");
+    const { isGitIgnored } = await import("../src/git.ts");
+    expect(await isGitIgnored(".env")).toBe(true);
+    expect(execMock.mock.calls[0]![0]).toBe('git check-ignore -q ".env"');
+  });
+
+  test("is false when git check-ignore exits non-zero", async () => {
+    mockExecError(new Error("exit 1"));
+    const { isGitIgnored } = await import("../src/git.ts");
+    expect(await isGitIgnored(".env")).toBe(false);
+  });
+});
