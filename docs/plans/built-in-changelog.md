@@ -49,8 +49,8 @@ Consumer creates **one** of:
 
 ```jsonc
 {
-  "jiraBaseUrl": "https://fielmann.atlassian.net",
-  "ticketPattern": "((CPP|SC[A-Z]+)-[0-9]{4,})",
+  "jiraBaseUrl": "https://myorg.atlassian.net",
+  "ticketPattern": "((PROJ|TEAM)-[0-9]{3,})",
 }
 ```
 
@@ -194,7 +194,7 @@ No other new runtime dependencies. `fetch` is native. No `simple-git` needed —
 - **Template engine** — YAGNI; hardcoded format covers all current consumers
 - **`dotenv` auto-loading** — consumers control env injection at CI level
 - **`ofetch`/`@octokit/core`** — native `fetch` suffices for 1-2 API calls
-- **Multi-provider** (GitLab, Bitbucket) — all consumers use GitHub
+- **Bitbucket** — GitHub and GitLab cover the current needs
 
 ## Implementation Phases
 
@@ -225,7 +225,7 @@ No other new runtime dependencies. `fetch` is native. No `simple-git` needed —
 pnpm update jvm-release-cli@^2.0.0
 
 # 2. Create config (minimal)
-echo '{ "jiraBaseUrl": "https://fielmann.atlassian.net", "ticketPattern": "((CPP|SC[A-Z]+)-[0-9]{4,})" }' > .release-clirc.json
+echo '{ "jiraBaseUrl": "https://myorg.atlassian.net", "ticketPattern": "((PROJ|TEAM)-[0-9]{3,})" }' > .release-clirc.json
 
 # 3. Remove legacy
 rm changelog.config.cjs

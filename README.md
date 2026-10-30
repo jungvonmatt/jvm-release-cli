@@ -4,7 +4,7 @@
 [![npm version](https://img.shields.io/npm/v/jvm-release-cli)](https://www.npmjs.com/package/jvm-release-cli)
 [![license](https://img.shields.io/npm/l/jvm-release-cli)](./LICENSE)
 
-A general-purpose release preparation CLI for git-based projects. Automates version bumping, Jira-linked changelog generation, and GitHub release drafts — all in a single interactive workflow.
+A general-purpose release preparation CLI for git-based projects. Automates version bumping, Jira-linked changelog generation, and GitHub or GitLab release pages — all in a single interactive workflow.
 
 ## Features
 
@@ -12,11 +12,12 @@ A general-purpose release preparation CLI for git-based projects. Automates vers
 - **Built-in changelog engine** — graph-based git log parsing with Jira ticket enrichment
 - **First-parent graph resolution** — correctly handles merge commits, nesting branch commits under their merge
 - **Revert detection** — excludes reverted commits (odd revert depth = excluded, even = kept)
+- **Pull/merge request links** — adds GitHub PR or GitLab MR links and author handles to the changelog, via an API token or the `gh` / `glab` CLI
 - **Graceful degradation** — works without Jira credentials (falls back to raw commit list)
-- **GitHub release drafts** — opens a pre-filled release draft in your browser after a successful release
+- **Release pages** — opens a pre-filled GitHub release draft, or the GitLab "new release" page, in your browser after a successful release
 - **Preview mode** — dry-run that prints all git commands without executing them
 - **Rollback support** — automatic cleanup of tags and version bump commits on failure
-- **Hotfix awareness** — warns when running from a `hotfix/*` branch and suggests the manual process
+- **Hotfix awareness** — warns and asks before it continues on a `hotfix/*` branch
 
 ## Installation
 
@@ -59,11 +60,11 @@ When you run `jvm-release`, it:
 4. **Runs tests** — executes the project's test suite (skipped with `--no-tests`)
 5. **Generates a changelog** — builds a Jira-enriched Markdown changelog for the tag range
 6. **Pushes to origin** — pushes the commit and tag
-7. **Opens a GitHub release draft** — pre-filled with the generated changelog
+7. **Opens the release page** — on GitHub, a release draft pre-filled with tag, title and changelog. GitLab can only pre-fill the tag, so the CLI also prints the changelog for you to paste.
 
 On any failure, the CLI automatically rolls back: the version commit is removed, the tag is deleted, and any in-progress merge is aborted.
 
-> **Hotfix releases:** The automated script is designed for regular releases from the main branch. For hotfix releases, follow the manual process. The CLI will warn you when it detects a `hotfix/*` branch.
+> **Hotfix releases:** The CLI is designed for regular releases from the release branch. A production release merges the version bump into `main`, which can conflict with a hotfix flow. On a `hotfix/*` branch, the CLI warns and asks before it continues.
 
 ## Configuration
 
@@ -90,7 +91,8 @@ Create one of the following config files (resolved by `@jungvonmatt/config-loade
   // Required: Jira instance URL used to build ticket links in the changelog
   "jiraBaseUrl": "https://myorg.atlassian.net",
 
-  // Optional: override the Jira API host (defaults to jiraBaseUrl)
+  // Optional: override the Jira API host (defaults to jiraBaseUrl).
+  // A bare host such as "myorg.atlassian.net" (the jira-changelog format) gets https:// added.
   "jiraApiHost": "https://myorg.atlassian.net",
 
   // Optional: Jira API credentials for ticket enrichment
@@ -100,8 +102,24 @@ Create one of the following config files (resolved by `@jungvonmatt/config-loade
   // Optional: regex used to extract ticket IDs from commit messages (default: [A-Z]+-\d+)
   "ticketPattern": "((PROJ|TEAM)-[0-9]{3,})",
 
-  // Optional: GitHub personal access token (reserved for future PR enrichment)
+  // Optional: API tokens for pull/merge request links.
+  // Without a token, the CLI uses `gh` (GitHub) or `glab` (GitLab) if it is installed and logged in.
   "githubToken": "ghp_...",
+  "gitlabToken": "glpat-...",
+
+  // Optional: provider of the `origin` remote. Detected from the host name ("github"/"gitlab").
+  // Set it for self-hosted instances whose host name contains neither word.
+  "gitProvider": "gitlab",
+
+  // Optional: set to false to skip pull/merge request lookups (default: true)
+  "pullRequests": true,
+
+  // Optional: list only tickets that are linked to a pull/merge request (default: false)
+  "onlyTicketsWithPullRequest": false,
+
+  // Optional: source branches of back-merge pull/merge requests, which are ignored
+  // (default: ["main", "master", "production", "release"])
+  "backMergeBranches": ["main", "master", "production", "release"],
 }
 ```
 
@@ -109,13 +127,14 @@ Create one of the following config files (resolved by `@jungvonmatt/config-loade
 
 All config values can be provided via environment variables. This is the recommended approach for CI.
 
-| Environment variable         | Config key     | Description                                       |
-| ---------------------------- | -------------- | ------------------------------------------------- |
-| `CHANGELOG_JIRA_BASEURL`     | `jiraBaseUrl`  | Jira base URL                                     |
-| `CHANGELOG_JIRA_API_HOST`    | `jiraApiHost`  | Jira API host (defaults to `jiraBaseUrl`)         |
-| `CHANGELOG_JIRA_API_EMAIL`   | `jiraApiEmail` | Jira API email for Basic Auth                     |
-| `CHANGELOG_JIRA_API_TOKEN`   | `jiraApiToken` | Jira API token for Basic Auth                     |
-| `CHANGELOG_GITHUB_API_TOKEN` | `githubToken`  | GitHub token (optional, for future PR enrichment) |
+| Environment variable         | Config key     | Description                                     |
+| ---------------------------- | -------------- | ----------------------------------------------- |
+| `CHANGELOG_JIRA_BASEURL`     | `jiraBaseUrl`  | Jira base URL                                   |
+| `CHANGELOG_JIRA_API_HOST`    | `jiraApiHost`  | Jira API host (defaults to `jiraBaseUrl`)       |
+| `CHANGELOG_JIRA_API_EMAIL`   | `jiraApiEmail` | Jira API email for Basic Auth                   |
+| `CHANGELOG_JIRA_API_TOKEN`   | `jiraApiToken` | Jira API token for Basic Auth                   |
+| `CHANGELOG_GITHUB_API_TOKEN` | `githubToken`  | GitHub token for pull request links (optional)  |
+| `CHANGELOG_GITLAB_API_TOKEN` | `gitlabToken`  | GitLab token for merge request links (optional) |
 
 **Behavior by environment:**
 
@@ -138,6 +157,10 @@ Revert detection & consolidation
   └─ subject + body of merge + branch commits unified
        │
        ▼
+Pull/merge request lookup  ──→  (fallback: skipped)
+  └─ PR title + source branch added to the text
+       │
+       ▼
 Ticket extraction (configurable regex)
        │
        ▼
@@ -152,6 +175,15 @@ Markdown formatter
 **Issue type display order:** Epic → Story → Task → Sub-Task → Bug → Technical Improvement → Technical Debt → IT Security. Unknown types are appended at the end.
 
 **Commits without a Jira ticket** appear in an "Other Commits" section. Noise commits (e.g. branch-merge bookkeeping, l10n syncs) are filtered automatically.
+
+**Pull/merge request links:** the CLI finds the request number in each mainline commit:
+
+| Provider | Merge commit                                   | Squash commit        |
+| -------- | ---------------------------------------------- | -------------------- |
+| GitHub   | `Merge pull request #12 from …`                | subject ends `(#12)` |
+| GitLab   | body line `See merge request group/project!12` | subject ends `(!12)` |
+
+It loads each request once, with the token from the config or with `gh api` / `glab api`. Each ticket line then gets the request links and the authors' handles (for example `([#12](…)) @alice`). The handles replace the Jira assignee. A commit with a ticket appears only on that ticket's line. A commit without a ticket is listed once under "Other Commits", by its request title. A back-merge request (source branch in `backMergeBranches`, for example `production` into `main`) is ignored: it adds no link, no handle and no "Other Commits" entry. Commits from fast-forward merges have no request number, so they get no link. If a lookup fails, the changelog is still generated and the CLI prints one warning.
 
 **Revert handling:** a commit reverted an odd number of times is excluded; reverted an even number of times (i.e. the revert itself was reverted) it is kept.
 

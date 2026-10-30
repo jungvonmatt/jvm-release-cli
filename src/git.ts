@@ -8,6 +8,7 @@ import { exec } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
+import type { GitProvider } from "./changelog/types.ts";
 
 const execa = promisify(exec);
 
@@ -182,25 +183,55 @@ export const abortMerge = async (): Promise<void> => {
   }
 };
 
+export interface RemoteRepository {
+  /** Web host, e.g. `github.com` or `gitlab.example.com:8443`. */
+  host: string;
+  /** Project path, e.g. `owner/repo` or `group/subgroup/project`. */
+  path: string;
+}
+
 /**
- * Reads the `origin` remote URL and normalizes it to an HTTPS GitHub project URL.
+ * Splits a git remote URL into web host and project path.
+ *
+ * Supports scp-like SSH (`git@host:owner/repo.git`), `ssh://` and `http(s)://` URLs.
+ * The port of an SSH URL is dropped because it is not the web port.
  */
-export const getGithubProjectUrl = async (): Promise<string> => {
-  const { stdout } = await execa("git remote get-url origin");
+export const parseRemoteUrl = (url: string): RemoteRepository | null => {
+  const trimmed = url.trim();
+  const toPath = (path: string) => path.replace(/^\/+/, "").replace(/(\.git)?\/*$/, "");
 
-  let remoteUrl = stdout.trim();
-
-  // Convert SSH URL to HTTPS if needed
-  if (remoteUrl.startsWith("git@")) {
-    const match = remoteUrl.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
-    if (match) {
-      remoteUrl = `https://${match[1]}/${match[2]}`;
-    }
-  } else {
-    remoteUrl = remoteUrl.replace(/\.git$/, "");
+  if (!trimmed.includes("://")) {
+    const match = trimmed.match(/^(?:[^@/]+@)?([^:/]+):(.+)$/);
+    return match ? { host: match[1]!, path: toPath(match[2]!) } : null;
   }
 
-  return remoteUrl;
+  try {
+    const parsed = new URL(trimmed);
+    const isWeb = parsed.protocol === "https:" || parsed.protocol === "http:";
+    const path = toPath(parsed.pathname);
+    return path ? { host: isWeb ? parsed.host : parsed.hostname, path } : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Reads the `origin` remote. Returns `null` if there is no `origin` or its URL cannot be parsed.
+ */
+export const getRemoteRepository = async (): Promise<RemoteRepository | null> => {
+  try {
+    const { stdout } = await execa("git remote get-url origin");
+    return parseRemoteUrl(stdout);
+  } catch {
+    return null;
+  }
+};
+
+/** Detects the provider from the remote host. Self-hosted instances may need `gitProvider` in the config. */
+export const detectProvider = (host: string): GitProvider | null => {
+  if (host.includes("github")) return "github";
+  if (host.includes("gitlab")) return "gitlab";
+  return null;
 };
 
 export const getPackageVersion = async (root: string): Promise<string> => {

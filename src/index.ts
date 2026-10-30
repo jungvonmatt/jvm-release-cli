@@ -1,15 +1,10 @@
 /* eslint-disable no-console */
-// Generated: Script to prepare releases for test and production branches
+// Release preparation CLI: bumps the version, tags it, generates the changelog
+// and opens the release page.
 //
-// ============================================================================
-// HOTFIX RELEASE PROCESS (Manual Process)
-// ============================================================================
-//
-// This script is designed for regular releases from the main branch.
-// For hotfix releases, please follow the manual process documented here:
-// https://fielmann.atlassian.net/wiki/spaces/CX/pages/8141537297/Storefront+Git+Flow+Branches+Tags+Deployments
-//
-// ============================================================================
+// It is designed for regular releases from the release branch (default: main).
+// A production release merges the version bump into main, which can conflict
+// with a hotfix flow, so the CLI asks before it continues on a `hotfix/*` branch.
 
 import { exec } from "node:child_process";
 import { resolve } from "node:path";
@@ -23,7 +18,8 @@ import {
   verifyCurrentBranchIsReleaseBranch,
   verifyWorkingTreeIsClean,
   verifyRemoteHistoryIsClean,
-  getGithubProjectUrl,
+  getRemoteRepository,
+  detectProvider,
   hasTag,
   deleteTag,
   removeLastCommit,
@@ -37,6 +33,8 @@ import {
 import { ui } from "./ui.ts";
 import { generateChangelog } from "./changelog/index.ts";
 import { loadChangelogConfig } from "./config.ts";
+import { getReleasePage } from "./release-page.ts";
+import type { ChangelogConfig } from "./changelog/types.ts";
 import type { ReleaseTarget, ReleaseContext } from "./types.ts";
 
 const ROOT = process.cwd();
@@ -71,10 +69,11 @@ const main = defineCommand({
       description: "Show tasks without actually executing them",
       default: false,
     },
-    "no-tests": {
+    // citty reads `--no-tests` as `tests: false`, and lists a default-true flag as `--no-tests`
+    tests: {
       type: "boolean",
       description: "Skip running tests",
-      default: false,
+      default: true,
     },
     changelog: {
       type: "boolean",
@@ -91,7 +90,7 @@ const main = defineCommand({
       const releaseTarget = (args.target as ReleaseTarget) || undefined;
       const branch = args.branch;
       const preview = args.preview;
-      const skipTests = args["no-tests"];
+      const skipTests = !args.tests;
       const changelogOnly = args["changelog"];
       const root = args.cwd ? resolve(args.cwd) : ROOT;
 
@@ -117,6 +116,8 @@ const main = defineCommand({
         version: "",
         changelog: "",
       };
+      // Loaded by the changelog task, reused by the release page task
+      let changelogConfig: ChangelogConfig | undefined;
 
       const result = await ui(releaseTarget);
 
@@ -143,23 +144,23 @@ const main = defineCommand({
       // Check if running from a hotfix branch
       const currentBranch = await getCurrentBranch();
       if (currentBranch.startsWith("hotfix/")) {
-        console.log(pc.yellow("⚠️  Warning: Running release script from a hotfix branch"));
+        console.log(pc.yellow("⚠️  Warning: Running the release from a hotfix branch"));
         console.log(
           pc.yellow(
-            "   For hotfix releases, the manual process is recommended to avoid merge conflicts.",
+            "   A production release merges the version bump into main, which can cause merge conflicts.",
           ),
         );
-        console.log(pc.yellow("   See instructions at the top of this script."));
+        console.log(pc.yellow("   Consider tagging and releasing the hotfix by hand."));
         console.log("");
 
         const shouldContinue = await confirm({
-          message: "Do you want to continue with the automated script anyway?",
+          message: "Do you want to continue with the automated release anyway?",
           default: false,
         });
 
         if (!shouldContinue) {
           console.log("");
-          console.log(pc.dim("Release cancelled. Use the manual hotfix process instead."));
+          console.log(pc.dim("Release cancelled."));
           console.log("");
           process.exit(0);
         }
@@ -256,9 +257,9 @@ const main = defineCommand({
                     `Cannot release ${version}: main branch is already at v${mainVersion}.\n` +
                       `Your branch is based on ${latestTag}.\n\n` +
                       `Suggested solutions:\n` +
-                      `1. Merge your changes into main first, then run 'pnpm release' from main\n` +
+                      `1. Merge your changes into main first, then run the release from main\n` +
                       `2. Use a higher version number like ${suggestedVersion}\n` +
-                      `3. If this is a production hotfix, follow the manual process documented at the top of this script`,
+                      `3. For a production hotfix, tag and release it by hand`,
                   );
                 }
 
@@ -361,8 +362,8 @@ const main = defineCommand({
               const toRef = ctx.isPrerelease ? prereleaseTarget : releaseTarget;
               const range = fromTag === INITIAL_VERSION ? toRef : `tags/${fromTag}...${toRef}`;
 
-              const config = await loadChangelogConfig(root);
-              ctx.changelog = await generateChangelog(range, config);
+              changelogConfig = await loadChangelogConfig(root);
+              ctx.changelog = await generateChangelog(range, changelogConfig);
 
               if (!ctx.changelog) {
                 ctx.changelog = "No ticket changes detected.";
@@ -370,24 +371,32 @@ const main = defineCommand({
             },
           },
           {
-            title: "Opening release draft",
+            title: "Opening release page",
             task: async () => {
-              const githubUrl = await getGithubProjectUrl();
+              const repo = await getRemoteRepository();
+              if (!repo) {
+                console.warn(
+                  pc.yellow("✗ Cannot read the origin remote. Create the release by hand."),
+                );
+                return;
+              }
 
-              const url = new URL(`${githubUrl}/releases/new`);
-
-              url.searchParams.set("tag", ctx.version);
-              url.searchParams.set("target", "main");
-              url.searchParams.set("title", ctx.version);
-              url.searchParams.set("body", ctx.changelog);
-              url.searchParams.set("prerelease", ctx.isPrerelease ? "1" : "0");
+              const provider =
+                changelogConfig?.gitProvider ?? detectProvider(repo.host) ?? "github";
+              const page = getReleasePage(repo, provider, {
+                version: ctx.version,
+                changelog: ctx.changelog,
+                isPrerelease: Boolean(ctx.isPrerelease),
+                target: "main",
+              });
+              ctx.notesInReleasePage = page.includesNotes;
 
               try {
-                await openUrl(url.toString());
+                await openUrl(page.url);
               } catch (error: unknown) {
                 console.warn(pc.yellow(`✗ Failed to open browser: ${(error as Error).message}`));
                 console.warn(pc.yellow("Please open the following URL in your browser:"));
-                console.warn(pc.yellow(url.toString()));
+                console.warn(pc.yellow(page.url));
               }
             },
           },
@@ -403,6 +412,14 @@ const main = defineCommand({
       );
 
       await tasks.run(ctx);
+
+      // GitLab's release page cannot be prefilled with notes, so print them for pasting
+      if (!ctx.notesInReleasePage) {
+        console.log("");
+        console.log(pc.bold("Release notes (paste them into the release form):"));
+        console.log("");
+        console.log(ctx.changelog);
+      }
 
       console.log("");
       console.log(
