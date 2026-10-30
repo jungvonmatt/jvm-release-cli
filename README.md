@@ -30,6 +30,9 @@ npm install --save-dev jvm-release-cli
 ## Usage
 
 ```bash
+# Create .release-clirc.json interactively (run once per project)
+jvm-release init
+
 # Interactive mode — prompts for deployment target
 jvm-release
 
@@ -68,7 +71,21 @@ On any failure, the CLI automatically rolls back: the version commit is removed,
 
 ## Configuration
 
-Create one of the following config files (resolved by `@jungvonmatt/config-loader`):
+Run `jvm-release init` in the project root to create the config:
+
+```bash
+jvm-release init
+jvm-release init --cwd ./packages/shop   # another working directory
+```
+
+It asks for the Jira URL and the ticket pattern, and suggests a pattern from the ticket keys in recent commits. It writes:
+
+- `.release-clirc.json` with `jiraBaseUrl`, `ticketPattern` and, for self-hosted git hosts, `gitProvider`. Commit this file.
+- `.env` with the Jira email and API token, if you enter them. `init` writes `.env` only when git ignores it, and offers to add it to `.gitignore`.
+
+`init` stops when the project already has a config. To change a value, edit the file.
+
+To write the config by hand, create one of the following files (resolved by `@jungvonmatt/config-loader`):
 
 | File                                  | Format     |
 | ------------------------------------- | ---------- |
@@ -125,7 +142,7 @@ Create one of the following config files (resolved by `@jungvonmatt/config-loade
 
 ### Environment variables
 
-All config values can be provided via environment variables. This is the recommended approach for CI.
+All config values can be provided via environment variables. This is the recommended approach for CI. The CLI also loads a `.env` file from the working directory.
 
 | Environment variable         | Config key     | Description                                     |
 | ---------------------------- | -------------- | ----------------------------------------------- |
@@ -138,7 +155,7 @@ All config values can be provided via environment variables. This is the recomme
 
 **Behavior by environment:**
 
-- **Local (non-CI):** missing `jiraBaseUrl` or `ticketPattern` trigger interactive prompts.
+- **Local (non-CI):** missing values do not stop the release. The changelog falls back to raw commit summaries, and the CLI suggests `jvm-release init`.
 - **CI (`CI=true`):** missing `jiraBaseUrl` throws a hard error with an actionable message listing all missing fields.
 
 ## How the changelog works
