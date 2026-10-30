@@ -84,6 +84,19 @@ export const commitLogFromRevision = async (revision: string): Promise<string> =
   return stdout.trim();
 };
 
+/**
+ * Gets subject and body of the last `limit` commits. Returns an empty string in a repository
+ * without commits.
+ */
+export const getRecentCommitMessages = async (limit = 500): Promise<string> => {
+  try {
+    const { stdout } = await execa(`git log -n ${limit} --format="%s%n%b"`);
+    return stdout.trim();
+  } catch {
+    return "";
+  }
+};
+
 const isWorkingTreeClean = async (): Promise<boolean> => {
   try {
     const { stdout } = await execa("git status --porcelain");
