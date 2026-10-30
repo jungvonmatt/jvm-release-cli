@@ -6,6 +6,12 @@ import { getLatestReleaseTag, getLatestTag, commitLogFromRevision } from "./git.
 import type { ReleaseTarget, ReleaseSelection } from "./types.ts";
 
 /**
+ * Detects the error `@inquirer/prompts` throws when the user presses Ctrl+C.
+ */
+export const isPromptCancel = (error: unknown): boolean =>
+  error instanceof Error && /force closed|SIGINT/i.test(error.message);
+
+/**
  * Interactive UI flow for selecting which version to publish.
  *
  * This prompts the user for either:
