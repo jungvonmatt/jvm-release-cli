@@ -70,8 +70,8 @@ describe("buildGraph", () => {
       makeCommit({
         hash: "feat1",
         parents: ["base"],
-        subject: "CPP-1234 add feature",
-        body: "Resolves CPP-5678",
+        subject: "PROJ-1234 add feature",
+        body: "Resolves PROJ-5678",
       }),
       makeCommit({ hash: "base", parents: [] }),
     ];
@@ -80,8 +80,8 @@ describe("buildGraph", () => {
     const mergeNode = result.find((n) => n.commit.hash === "merge1")!;
 
     expect(mergeNode.fullText).toContain("Merge feat");
-    expect(mergeNode.fullText).toContain("CPP-1234 add feature");
-    expect(mergeNode.fullText).toContain("Resolves CPP-5678");
+    expect(mergeNode.fullText).toContain("PROJ-1234 add feature");
+    expect(mergeNode.fullText).toContain("Resolves PROJ-5678");
   });
 
   test("revert detection excludes reverted commits", () => {
@@ -119,7 +119,7 @@ describe("buildGraph", () => {
         subject: 'Revert "add feature"',
         body: "This reverts commit bbb222.",
       }),
-      makeCommit({ hash: "bbb222", parents: ["ccc333"], subject: "CPP-1000 add feature" }),
+      makeCommit({ hash: "bbb222", parents: ["ccc333"], subject: "PROJ-1000 add feature" }),
       makeCommit({ hash: "ccc333", parents: [] }),
     ];
 
@@ -135,7 +135,7 @@ describe("extractTickets", () => {
     const nodes: GraphNode[] = [
       {
         commit: makeCommit({ hash: "a" }),
-        fullText: "CPP-1234 did something\nSCAYLE-5678 other thing",
+        fullText: "PROJ-1234 did something\nTEAM-5678 other thing",
         merged: [],
       },
       {
@@ -146,8 +146,8 @@ describe("extractTickets", () => {
     ];
 
     const tickets = extractTickets(nodes, "[A-Z]+-\\d+");
-    expect(tickets).toContain("CPP-1234");
-    expect(tickets).toContain("SCAYLE-5678");
+    expect(tickets).toContain("PROJ-1234");
+    expect(tickets).toContain("TEAM-5678");
     expect(tickets).toHaveLength(2);
   });
 
@@ -155,31 +155,31 @@ describe("extractTickets", () => {
     const nodes: GraphNode[] = [
       {
         commit: makeCommit({ hash: "a" }),
-        fullText: "CPP-1234 first mention",
+        fullText: "PROJ-1234 first mention",
         merged: [],
       },
       {
         commit: makeCommit({ hash: "b" }),
-        fullText: "CPP-1234 second mention",
+        fullText: "PROJ-1234 second mention",
         merged: [],
       },
     ];
 
     const tickets = extractTickets(nodes, "[A-Z]+-\\d+");
-    expect(tickets).toEqual(["CPP-1234"]);
+    expect(tickets).toEqual(["PROJ-1234"]);
   });
 
   test("uses capture group when present in pattern", () => {
     const nodes: GraphNode[] = [
       {
         commit: makeCommit({ hash: "a" }),
-        fullText: "feat(CPP-1234): something",
+        fullText: "feat(PROJ-1234): something",
         merged: [],
       },
     ];
 
-    const tickets = extractTickets(nodes, "((CPP|SCAYLE)-\\d+)");
-    expect(tickets).toContain("CPP-1234");
+    const tickets = extractTickets(nodes, "((PROJ|TEAM)-\\d+)");
+    expect(tickets).toContain("PROJ-1234");
   });
 
   test("returns empty array when no tickets found", () => {

@@ -91,5 +91,12 @@ export async function fetchJiraTickets(
     }
   }
 
+  // Jira Cloud answers a search with bad credentials as anonymous: 200 OK and no issues
+  if (result.size === 0) {
+    console.warn(
+      `⚠️  Jira returned none of the ${ticketKeys.length} tickets. Check the Jira API email, token and project access.`,
+    );
+  }
+
   return result;
 }

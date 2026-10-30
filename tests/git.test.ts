@@ -251,23 +251,18 @@ describe("abortMerge", () => {
   });
 });
 
-describe("getGithubProjectUrl", () => {
-  test("converts SSH URL to HTTPS", async () => {
-    mockExec("git@github.com:org/repo.git\n");
-    const { getGithubProjectUrl } = await import("../src/git.ts");
-    expect(await getGithubProjectUrl()).toBe("https://github.com/org/repo");
+describe("detectProvider", () => {
+  test("detects GitHub and GitLab hosts", async () => {
+    const { detectProvider } = await import("../src/git.ts");
+    expect(detectProvider("github.com")).toBe("github");
+    expect(detectProvider("github.acme.com")).toBe("github");
+    expect(detectProvider("gitlab.com")).toBe("gitlab");
+    expect(detectProvider("gitlab.acme.com:8443")).toBe("gitlab");
   });
 
-  test("strips .git suffix from HTTPS URL", async () => {
-    mockExec("https://github.com/org/repo.git\n");
-    const { getGithubProjectUrl } = await import("../src/git.ts");
-    expect(await getGithubProjectUrl()).toBe("https://github.com/org/repo");
-  });
-
-  test("passes through clean HTTPS URL", async () => {
-    mockExec("https://github.com/org/repo\n");
-    const { getGithubProjectUrl } = await import("../src/git.ts");
-    expect(await getGithubProjectUrl()).toBe("https://github.com/org/repo");
+  test("returns null for unknown hosts", async () => {
+    const { detectProvider } = await import("../src/git.ts");
+    expect(detectProvider("git.acme.com")).toBeNull();
   });
 });
 
@@ -278,5 +273,41 @@ describe("getPackageVersion", () => {
     const version = await getPackageVersion("/project");
     expect(version).toBe("1.2.3");
     expect(readFileMock).toHaveBeenCalledWith(resolve("/project", "package.json"), "utf8");
+  });
+});
+
+describe("parseRemoteUrl", () => {
+  test.each([
+    ["git@github.com:owner/repo.git", "github.com", "owner/repo"],
+    ["git@gitlab.com:group/sub/project.git", "gitlab.com", "group/sub/project"],
+    ["ssh://git@gitlab.acme.com:2222/group/project.git", "gitlab.acme.com", "group/project"],
+    ["https://github.com/owner/repo.git", "github.com", "owner/repo"],
+    ["https://user@gitlab.acme.com:8443/group/project/", "gitlab.acme.com:8443", "group/project"],
+    ["https://github.com/owner/repo\n", "github.com", "owner/repo"],
+  ])("parses %s", async (url, host, path) => {
+    const { parseRemoteUrl } = await import("../src/git.ts");
+    expect(parseRemoteUrl(url)).toEqual({ host, path });
+  });
+
+  test("returns null for an unparseable URL", async () => {
+    const { parseRemoteUrl } = await import("../src/git.ts");
+    expect(parseRemoteUrl("not a url")).toBeNull();
+  });
+});
+
+describe("getRemoteRepository", () => {
+  test("returns host and path of origin", async () => {
+    mockExec("git@gitlab.com:group/project.git\n");
+    const { getRemoteRepository } = await import("../src/git.ts");
+    await expect(getRemoteRepository()).resolves.toEqual({
+      host: "gitlab.com",
+      path: "group/project",
+    });
+  });
+
+  test("returns null without origin", async () => {
+    mockExecError(new Error("No such remote 'origin'"));
+    const { getRemoteRepository } = await import("../src/git.ts");
+    await expect(getRemoteRepository()).resolves.toBeNull();
   });
 });
