@@ -107,6 +107,18 @@ const isWorkingTreeClean = async (): Promise<boolean> => {
 };
 
 /**
+ * Checks whether git ignores `path`. Also `false` outside a git repository.
+ */
+export const isGitIgnored = async (path: string): Promise<boolean> => {
+  try {
+    await execa(`git check-ignore -q "${path}"`);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
  * Ensures there are no local modifications (tracked/untracked) in the working tree.
  */
 export const verifyWorkingTreeIsClean = async (): Promise<void> => {

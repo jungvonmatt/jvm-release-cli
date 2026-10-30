@@ -1,6 +1,43 @@
 /**
  * Read-only checks for `jvm-release init`: what the repository already has and what it suggests.
  */
+import { execFile } from "node:child_process";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+
+/** Config files that `@jungvonmatt/config-loader` reads for the name `release-cli`. */
+const CONFIG_FILE = /^(\.release-clirc(\.[a-z]+)?|release-cli\.config\.[a-z0-9]+)$/;
+
+/**
+ * Returns the config source in `cwd` (a file name, or `package.json` for its `release-cli` key),
+ * or `null` if there is none.
+ */
+export const findExistingConfig = async (cwd: string): Promise<string | null> => {
+  const names = (await readdir(cwd)).sort();
+  const configFile = names.find((name) => CONFIG_FILE.test(name));
+  if (configFile) return configFile;
+
+  try {
+    const pkg = JSON.parse(await readFile(join(cwd, "package.json"), "utf8")) as object;
+    return "release-cli" in pkg ? "package.json" : null;
+  } catch {
+    // A missing or malformed package.json holds no config
+    return null;
+  }
+};
+
+/** Checks whether `gh` or `glab` is installed and logged in for `host`. */
+export const isCliLoggedIn = async (command: "gh" | "glab", host: string): Promise<boolean> => {
+  try {
+    await execFileAsync(command, ["auth", "status", "--hostname", host]);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 /** Prefixes that look like ticket keys but name encodings and standards (`UTF-8`, `RFC-2119`). */
 const IGNORED_PREFIXES = new Set(["CVE", "ISO", "RFC", "SHA", "UTF"]);

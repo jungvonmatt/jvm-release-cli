@@ -1,5 +1,14 @@
-import { describe, expect, test } from "vite-plus/test";
-import { inferTicketPattern } from "../src/init/detect.ts";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { findExistingConfig, inferTicketPattern, isCliLoggedIn } from "../src/init/detect.ts";
+
+// Mock child_process: `execFile` runs gh/glab
+const execFileMock = vi.fn();
+vi.mock("node:child_process", () => ({
+  execFile: (...args: any[]) => execFileMock(...args),
+}));
 
 describe("inferTicketPattern", () => {
   test("joins frequent project keys in alphabetical order", () => {
@@ -38,5 +47,73 @@ describe("inferTicketPattern", () => {
 
   test("returns null without keys", () => {
     expect(inferTicketPattern("")).toBeNull();
+  });
+});
+
+describe("findExistingConfig", () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "release-cli-"));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test("returns null for an empty directory", async () => {
+    expect(await findExistingConfig(dir)).toBeNull();
+  });
+
+  test.each([
+    ".release-clirc",
+    ".release-clirc.json",
+    ".release-clirc.yaml",
+    "release-cli.config.ts",
+    "release-cli.config.mjs",
+  ])("finds %s", async (name) => {
+    await writeFile(join(dir, name), "");
+    expect(await findExistingConfig(dir)).toBe(name);
+  });
+
+  test("finds the release-cli key in package.json", async () => {
+    await writeFile(join(dir, "package.json"), JSON.stringify({ "release-cli": {} }));
+    expect(await findExistingConfig(dir)).toBe("package.json");
+  });
+
+  test("ignores a package.json without the key", async () => {
+    await writeFile(join(dir, "package.json"), JSON.stringify({ name: "x" }));
+    expect(await findExistingConfig(dir)).toBeNull();
+  });
+
+  test("ignores a malformed package.json", async () => {
+    await writeFile(join(dir, "package.json"), "{ not json");
+    expect(await findExistingConfig(dir)).toBeNull();
+  });
+});
+
+describe("isCliLoggedIn", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("checks the login for the host", async () => {
+    execFileMock.mockImplementation((...args: any[]) => {
+      const cb = args.at(-1) as Function;
+      cb(null, { stdout: "", stderr: "Logged in to github.com" });
+    });
+    expect(await isCliLoggedIn("gh", "github.com")).toBe(true);
+    expect(execFileMock.mock.calls[0]!.slice(0, 2)).toEqual([
+      "gh",
+      ["auth", "status", "--hostname", "github.com"],
+    ]);
+  });
+
+  test("is false when the command is missing or not logged in", async () => {
+    execFileMock.mockImplementation((...args: any[]) => {
+      const cb = args.at(-1) as Function;
+      cb(Object.assign(new Error("spawn glab ENOENT"), { code: "ENOENT" }));
+    });
+    expect(await isCliLoggedIn("glab", "gitlab.com")).toBe(false);
   });
 });

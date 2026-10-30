@@ -326,3 +326,18 @@ describe("getRecentCommitMessages", () => {
     expect(await getRecentCommitMessages()).toBe("");
   });
 });
+
+describe("isGitIgnored", () => {
+  test("is true when git check-ignore matches", async () => {
+    mockExec("");
+    const { isGitIgnored } = await import("../src/git.ts");
+    expect(await isGitIgnored(".env")).toBe(true);
+    expect(execMock.mock.calls[0]![0]).toBe('git check-ignore -q ".env"');
+  });
+
+  test("is false when git check-ignore exits non-zero", async () => {
+    mockExecError(new Error("exit 1"));
+    const { isGitIgnored } = await import("../src/git.ts");
+    expect(await isGitIgnored(".env")).toBe(false);
+  });
+});
