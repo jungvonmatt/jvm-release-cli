@@ -6,7 +6,6 @@ export default defineConfig({
   },
   pack: {
     dts: false,
-    exports: true,
     banner: "#!/usr/bin/env node",
   },
   lint: {

@@ -19,6 +19,13 @@ A general-purpose release preparation CLI for git-based projects. Automates vers
 - **Rollback support** — automatic cleanup of tags and version bump commits on failure
 - **Hotfix awareness** — warns and asks before it continues on a `hotfix/*` branch
 
+## Requirements
+
+- Node.js 22 or later
+- [pnpm](https://pnpm.io). The CLI runs `pnpm version` to bump the version and `pnpm test` to run the tests.
+- A git repository with an `origin` remote
+- A `test` script in `package.json`, or the `--no-tests` flag
+
 ## Installation
 
 ```bash
@@ -41,17 +48,11 @@ jvm-release test         # creates a prerelease (e.g. v1.2.0-pre.1)
 jvm-release production   # creates a stable release (e.g. v1.2.0)
 
 # Flags
-jvm-release --branch main   # release branch to check against (default: main)
+jvm-release --branch main   # release branch to check against and merge into (default: main)
 jvm-release --preview       # dry-run: print git commands, make no changes
 jvm-release --no-tests      # skip test execution step
+jvm-release --version       # print the CLI version
 ```
-
-All three bin aliases point to the same CLI:
-
-| Command       | Notes                  |
-| ------------- | ---------------------- |
-| `jvm-release` | Recommended short form |
-| `release`     | Shortest alias         |
 
 ### Release workflow
 
@@ -67,7 +68,7 @@ When you run `jvm-release`, it:
 
 On any failure, the CLI automatically rolls back: the version commit is removed, the tag is deleted, and any in-progress merge is aborted.
 
-> **Hotfix releases:** The CLI is designed for regular releases from the release branch. A production release merges the version bump into `main`, which can conflict with a hotfix flow. On a `hotfix/*` branch, the CLI warns and asks before it continues.
+> **Hotfix releases:** The CLI is designed for regular releases from the release branch. A production release merges the version bump into the release branch (`--branch`, default `main`), which can conflict with a hotfix flow. On a `hotfix/*` branch, the CLI warns and asks before it continues.
 
 ## Configuration
 
@@ -182,7 +183,7 @@ Ticket extraction (configurable regex)
        │
        ▼
 Jira bulk JQL fetch  ──→  (fallback: raw ticket IDs)
-  POST /rest/api/3/search
+  POST /rest/api/3/search/jql  (Data Center: /rest/api/2/search)
        │
        ▼
 Markdown formatter
