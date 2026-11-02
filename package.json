@@ -13,7 +13,7 @@
     "url": "git+https://github.com/jungvonmatt/jvm-release-cli.git"
   },
   "bin": {
-    "jvm-release": "./dist/index.mjs"
+    "jvm-release": "dist/index.mjs"
   },
   "files": [
     "dist"
@@ -27,7 +27,7 @@
     "dev": "vp pack --watch",
     "test": "vp test",
     "check": "vp check",
-    "prepublishOnly": "vp run build",
+    "prepack": "vp run build",
     "prepare": "vp config"
   },
   "dependencies": {
