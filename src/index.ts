@@ -2,8 +2,8 @@
 // Release preparation CLI: bumps the version, tags it, generates the changelog
 // and opens the release page.
 //
-// It is designed for regular releases from the release branch (default: main).
-// A production release merges the version bump into main, which can conflict
+// It is designed for regular releases from the release branch (`--branch`, default: main).
+// A production release merges the version bump into the release branch, which can conflict
 // with a hotfix flow, so the CLI asks before it continues on a `hotfix/*` branch.
 
 import { exec } from "node:child_process";
@@ -22,6 +22,7 @@ import {
   detectProvider,
   hasTag,
   deleteTag,
+  deleteTemporaryBranch,
   removeLastCommit,
   abortMerge,
   getCurrentBranch,
@@ -37,6 +38,7 @@ import { init } from "./init/index.ts";
 import { getReleasePage } from "./release-page.ts";
 import type { ChangelogConfig } from "./changelog/types.ts";
 import type { ReleaseContext } from "./types.ts";
+import pkg from "../package.json" with { type: "json" };
 
 const ROOT = process.cwd();
 const execa = promisify(exec);
@@ -51,7 +53,8 @@ const openUrl = async (url: string): Promise<void> => {
 
 const main = defineCommand({
   meta: {
-    name: "jvm-release-cli",
+    name: "jvm-release",
+    version: pkg.version,
     description:
       "Release preparation CLI for git-based projects. Run `jvm-release init` to create a config file.",
   },
@@ -149,7 +152,7 @@ const main = defineCommand({
         console.log(pc.yellow("⚠️  Warning: Running the release from a hotfix branch"));
         console.log(
           pc.yellow(
-            "   A production release merges the version bump into main, which can cause merge conflicts.",
+            `   A production release merges the version bump into ${branch}, which can cause merge conflicts.`,
           ),
         );
         console.log(pc.yellow("   Consider tagging and releasing the hotfix by hand."));
@@ -236,8 +239,8 @@ const main = defineCommand({
             const releaseBranch = `release/tmp-${version}`;
             if (preview) {
               console.log(pc.yellow(`git switch -c "${releaseBranch}" "${latestTag}^{commit}"`));
-              console.log(pc.yellow(`pnpm version --new-version ${pkgVersion} --no-commit-hooks`));
-              console.log(pc.yellow("git switch main"));
+              console.log(pc.yellow(`pnpm version ${pkgVersion} --no-commit-hooks`));
+              console.log(pc.yellow(`git switch "${branch}"`));
               console.log(
                 pc.yellow(`git merge --no-ff "${releaseBranch}" -m "Merge release ${version}"`),
               );
@@ -247,19 +250,19 @@ const main = defineCommand({
                 // create a temporary release branch
                 await execa(`git switch -c "${releaseBranch}" "${latestTag}^{commit}"`);
                 // bump version (package/git) using pnpm
-                await execa(`pnpm version --new-version ${pkgVersion} --no-commit-hooks`);
-                // switch to main branch
-                await execa("git switch main");
+                await execa(`pnpm version ${pkgVersion} --no-commit-hooks`);
+                // switch to the release branch
+                await execa(`git switch "${branch}"`);
 
-                // Check if main's version is higher than the version we're trying to release
-                const mainVersion = await getPackageVersion(root);
-                if (semver.gt(mainVersion, pkgVersion)) {
-                  const suggestedVersion = `v${semver.inc(mainVersion, "patch")}`;
+                // Check if the release branch's version is higher than the version we're trying to release
+                const branchVersion = await getPackageVersion(root);
+                if (semver.gt(branchVersion, pkgVersion)) {
+                  const suggestedVersion = `v${semver.inc(branchVersion, "patch")}`;
                   throw new Error(
-                    `Cannot release ${version}: main branch is already at v${mainVersion}.\n` +
+                    `Cannot release ${version}: ${branch} branch is already at v${branchVersion}.\n` +
                       `Your branch is based on ${latestTag}.\n\n` +
                       `Suggested solutions:\n` +
-                      `1. Merge your changes into main first, then run the release from main\n` +
+                      `1. Merge your changes into ${branch} first, then run the release from ${branch}\n` +
                       `2. Use a higher version number like ${suggestedVersion}\n` +
                       `3. For a production hotfix, tag and release it by hand`,
                   );
@@ -281,9 +284,10 @@ const main = defineCommand({
                   );
                 }
               } finally {
-                // always delete the temporary release branch (ignore errors if it doesn't exist)
+                // always return to the start branch and delete the temporary release branch
+                // (ignore errors if it doesn't exist)
                 try {
-                  await execa(`git branch -D "${releaseBranch}"`);
+                  await deleteTemporaryBranch(releaseBranch, currentBranch);
                 } catch {
                   // Branch might not exist if we failed early
                 }
@@ -301,10 +305,10 @@ const main = defineCommand({
 
             const pkgVersion = version.replace("v", "");
             if (preview) {
-              console.log(pc.yellow(`pnpm version --new-version ${pkgVersion} --no-commit-hooks`));
+              console.log(pc.yellow(`pnpm version ${pkgVersion} --no-commit-hooks`));
             } else {
               // bump version (package/git) using pnpm
-              await execa(`pnpm version --new-version ${pkgVersion} --no-commit-hooks`);
+              await execa(`pnpm version ${pkgVersion} --no-commit-hooks`);
               // verify the new version tag was created
               if (!(await hasTag(version))) {
                 throw new Error(`Failed to create new version tag ${version}`);
@@ -389,7 +393,7 @@ const main = defineCommand({
                 version: ctx.version,
                 changelog: ctx.changelog,
                 isPrerelease: Boolean(ctx.isPrerelease),
-                target: "main",
+                target: branch,
               });
               ctx.notesInReleasePage = page.includesNotes;
 

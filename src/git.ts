@@ -202,6 +202,20 @@ export const deleteTag = async (tag: string): Promise<void> => {
   await execa(`git tag --delete ${tag}`);
 };
 
+/**
+ * Deletes a temporary branch. If HEAD is still on it, because the release failed before it
+ * switched back, it first switches to `returnBranch` and discards the changes of the failed bump.
+ */
+export const deleteTemporaryBranch = async (
+  branch: string,
+  returnBranch: string,
+): Promise<void> => {
+  if ((await getCurrentBranch()) === branch) {
+    await execa(`git switch --discard-changes "${returnBranch}"`);
+  }
+  await execa(`git branch -D "${branch}"`);
+};
+
 export const removeLastCommit = async (): Promise<void> => {
   await execa("git reset --hard HEAD~1");
 };

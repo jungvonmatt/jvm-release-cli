@@ -157,7 +157,7 @@ export async function runInit(cwd: string): Promise<void> {
 
 export const init = defineCommand({
   meta: {
-    name: "init",
+    name: "jvm-release init",
     description: "Create a .release-clirc.json config file interactively.",
   },
   args: {
