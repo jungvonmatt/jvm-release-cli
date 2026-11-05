@@ -87,6 +87,9 @@ const fetchJson = async (url: string, headers: Record<string, string>): Promise<
   return response.json();
 };
 
+/** An expired, revoked or missing `gh`/`glab` login. */
+const CLI_AUTH_ERROR = /\b401\b|unauthorized|bad credentials|invalid_grant/i;
+
 /** Runs `gh api` or `glab api`, which reuse the login of the installed CLI. */
 const cliJson = async (command: string, path: string, host: string): Promise<unknown> => {
   try {
@@ -97,8 +100,17 @@ const cliJson = async (command: string, path: string, host: string): Promise<unk
     });
     return JSON.parse(stdout);
   } catch (error) {
-    const stderr = (error as { stderr?: string }).stderr?.trim();
-    throw new Error(stderr || (error as Error).message);
+    // glab boxes its errors: an "ERROR" banner, padding and hard line breaks
+    const stderr = (error as { stderr?: string }).stderr
+      ?.replace(/\s+/g, " ")
+      .trim()
+      .replace(/^ERROR /, "");
+    const message = stderr || (error as Error).message;
+    throw new Error(
+      CLI_AUTH_ERROR.test(message)
+        ? `${message} Run \`${command} auth login --hostname ${host}\` and try again.`
+        : message,
+    );
   }
 };
 
@@ -226,7 +238,11 @@ export async function attachPullRequests(
 
   if (failed.length > 0) {
     const prefix = client.provider === "github" ? "#" : "!";
-    const refs = failed.map((f) => `${prefix}${f.number}`).join(", ");
+    const refs = failed
+      .map((f) => f.number)
+      .sort((a, b) => a - b)
+      .map((n) => `${prefix}${n}`)
+      .join(", ");
     console.warn(
       `⚠️  Could not load ${failed.length} pull/merge request(s) (${refs}): ${failed[0]!.message}`,
     );
