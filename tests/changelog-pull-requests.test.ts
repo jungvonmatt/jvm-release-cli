@@ -27,6 +27,21 @@ function mockCli(available: string[], apiResponse: unknown = {}) {
   });
 }
 
+/** Makes `execFile` succeed for `cmd --version` and fail `api` calls with `stderr`. */
+function mockCliError(cmd: string, stderr: string) {
+  execFileMock.mockImplementation((_cmd: string, args: string[], ...rest: any[]) => {
+    const cb = rest.at(-1) as Function;
+    if (args[0] === "api") {
+      cb(Object.assign(new Error(`Command failed: ${cmd} api`), { stderr }), {
+        stdout: "",
+        stderr,
+      });
+    } else {
+      cb(null, { stdout: `${cmd} version 1.0.0`, stderr: "" });
+    }
+  });
+}
+
 function makeCommit(subject: string, body = ""): CommitLog {
   return {
     hash: `hash-${subject}`,
@@ -206,6 +221,27 @@ describe("createPullRequestClient", () => {
     expect(mr.reference).toBe("!41");
   });
 
+  test("flattens a boxed CLI error into one line", async () => {
+    mockCliError("glab", "          \n  ERROR  \n          \n  404 Not Found      \n\n");
+
+    const client = await createPullRequestClient({ jiraBaseUrl: "" }, gitlabRepo);
+
+    await expect(client!.get(41)).rejects.toThrow(/^404 Not Found$/);
+  });
+
+  test("adds a login hint when the CLI login has expired", async () => {
+    mockCliError(
+      "glab",
+      '  ERROR  \n          \n  oauth2: "invalid_grant" "The provided authorization grant is invalid, expired, revoked, does not match the          \n  redirection URI."      \n',
+    );
+
+    const client = await createPullRequestClient({ jiraBaseUrl: "" }, gitlabRepo);
+
+    await expect(client!.get(41)).rejects.toThrow(
+      'oauth2: "invalid_grant" "The provided authorization grant is invalid, expired, revoked, does not match the redirection URI." Run `glab auth login --hostname gitlab.com` and try again.',
+    );
+  });
+
   test("returns null and warns without token and CLI", async () => {
     mockCli([]);
 
@@ -301,6 +337,19 @@ describe("attachPullRequests", () => {
     expect(result.map((n) => n.pullRequest?.number)).toEqual([1, undefined, undefined]);
     expect(console.warn).toHaveBeenCalledTimes(1);
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("#2, #3"));
+  });
+
+  test("lists failed lookups in number order", async () => {
+    const get = vi.fn(async (n: number) => {
+      // #2 fails last
+      if (n === 2) await new Promise((resolve) => setTimeout(resolve, 5));
+      throw new Error("401 Unauthorized");
+    });
+    const nodes = [makeNode("One (#1)"), makeNode("Two (#2)"), makeNode("Three (#3)")];
+
+    await attachPullRequests(nodes, { provider: "github", get });
+
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("(#1, #2, #3)"));
   });
 
   test("ignores back-merge PRs from the default long-lived branches", async () => {
