@@ -63,7 +63,7 @@ const main = defineCommand({
   args: {
     target: {
       type: "positional",
-      description: "Release target: test | production (omit for interactive selection)",
+      description: "Release target: prerelease | production (omit for interactive selection)",
       required: false,
     },
     branch: {
@@ -145,7 +145,9 @@ const main = defineCommand({
       );
       console.log("");
       console.log(pc.dim(`  Current live version: ${pc.cyan(latestReleaseTag)}`));
-      console.log(pc.dim(`  Current test version: ${pc.cyan(latestTag)}`));
+      if (promotedTag) {
+        console.log(pc.dim(`  Current pre-release:  ${pc.cyan(promotedTag)}`));
+      }
       // Say what a production release contains, because newer commits can stay unreleased
       if (!semver.prerelease(version)) {
         if (promotedTag) {
@@ -158,7 +160,9 @@ const main = defineCommand({
             ),
           );
         } else {
-          console.log(pc.dim(`  Releases the tip of ${branch}, because no prerelease is pending.`));
+          console.log(
+            pc.dim(`  Releases the tip of ${branch}, because no pre-release is pending.`),
+          );
         }
       }
       console.log("");

@@ -2,9 +2,13 @@ import { describe, expect, test } from "vite-plus/test";
 import { getNextVersions, parseReleaseTarget } from "../src/ui.ts";
 
 describe("parseReleaseTarget", () => {
-  test("accepts test and production", () => {
-    expect(parseReleaseTarget("test")).toBe("test");
+  test("accepts prerelease and production", () => {
+    expect(parseReleaseTarget("prerelease")).toBe("prerelease");
     expect(parseReleaseTarget("production")).toBe("production");
+  });
+
+  test("accepts test as the old name of prerelease", () => {
+    expect(parseReleaseTarget("test")).toBe("prerelease");
   });
 
   test("returns undefined without a target", () => {
@@ -13,7 +17,9 @@ describe("parseReleaseTarget", () => {
   });
 
   test("rejects an unknown target instead of releasing to production", () => {
-    expect(() => parseReleaseTarget("prod")).toThrow('Unknown release target "prod"');
+    expect(() => parseReleaseTarget("prod")).toThrow(
+      'Unknown release target "prod". Use "prerelease" or "production".',
+    );
   });
 
   test("points to the flag order when init comes after a flag", () => {

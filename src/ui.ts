@@ -6,19 +6,21 @@ import { getLatestReleaseTag, getLatestTag, commitLogFromRevision } from "./git.
 import type { ReleaseTarget, ReleaseSelection } from "./types.ts";
 
 /**
- * Validates the `target` argument. `ui()` treats any target other than `test` as production,
- * so an unknown value must stop the CLI.
+ * Validates the `target` argument. `ui()` treats any target other than `prerelease` as
+ * production, so an unknown value must stop the CLI. `test` is the old name of `prerelease`, and
+ * scripts may still use it.
  */
 export const parseReleaseTarget = (value: string | undefined): ReleaseTarget | undefined => {
   if (!value) return undefined;
-  if (value === "test" || value === "production") return value;
+  if (value === "test") return "prerelease";
+  if (value === "prerelease" || value === "production") return value;
 
   // citty reads `init` as the target when a flag comes first, e.g. `jvm-release --cwd x init`
   const hint =
     value === "init"
       ? " To create a config, put the flags after init: jvm-release init --cwd <dir>."
       : "";
-  throw new Error(`Unknown release target "${value}". Use "test" or "production".${hint}`);
+  throw new Error(`Unknown release target "${value}". Use "prerelease" or "production".${hint}`);
 };
 
 /**
@@ -35,7 +37,7 @@ export interface NextVersions {
 }
 
 /**
- * Computes the next test and production versions from the latest tags.
+ * Computes the next prerelease and production versions from the latest tags.
  *
  * When a prerelease is newer than the last release, a production release promotes it, so the
  * tested state goes live. Otherwise there is nothing to promote, and a production release
@@ -59,7 +61,7 @@ export const getNextVersions = (latestTag: string, latestReleaseTag: string): Ne
  * Interactive UI flow for selecting which version to publish.
  *
  * This prompts the user for either:
- * - a deployment target (`test` / `production`), or
+ * - a deployment target (`prerelease` / `production`), or
  * - an explicit SemVer increment (e.g. `patch`, `prepatch`)
  */
 export const ui = async (
@@ -102,7 +104,8 @@ export const ui = async (
     return {
       ...result,
       target,
-      version: target === "test" ? newPrereleaseVersion.toString() : newReleaseVersion.toString(),
+      version:
+        target === "prerelease" ? newPrereleaseVersion.toString() : newReleaseVersion.toString(),
     };
   }
 
@@ -111,11 +114,11 @@ export const ui = async (
 
     choices: [
       {
-        name: `Test release         ${pc.dim(latestTag)} -> ${newPrereleaseVersion.format()}`,
+        name: `Pre-release          ${pc.dim(latestTag)} -> ${newPrereleaseVersion.format()}`,
         value: {
           ...result,
           version: newPrereleaseVersion.toString(),
-          target: "test" as ReleaseTarget,
+          target: "prerelease" as ReleaseTarget,
         },
       },
       {
