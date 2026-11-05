@@ -1,8 +1,8 @@
 # jvm-release
 
 [![CI](https://github.com/jungvonmatt/jvm-release-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/jungvonmatt/jvm-release-cli/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/jvm-release-cli)](https://www.npmjs.com/package/jvm-release-cli)
-[![license](https://img.shields.io/npm/l/jvm-release-cli)](./LICENSE)
+[![npm version](https://img.shields.io/npm/v/@jungvonmatt/release)](https://www.npmjs.com/package/@jungvonmatt/release)
+[![license](https://img.shields.io/npm/l/@jungvonmatt/release)](./LICENSE)
 
 A general-purpose release preparation CLI for git-based projects. Automates version bumping, Jira-linked changelog generation, and GitHub or GitLab release pages — all in a single interactive workflow.
 
@@ -29,9 +29,9 @@ A general-purpose release preparation CLI for git-based projects. Automates vers
 ## Installation
 
 ```bash
-pnpm add -D jvm-release-cli
+pnpm add -D @jungvonmatt/release
 # or
-npm install --save-dev jvm-release-cli
+npm install --save-dev @jungvonmatt/release
 ```
 
 ## Usage
