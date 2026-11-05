@@ -38,6 +38,7 @@ import { generateChangelog } from "./changelog/index.ts";
 import { loadChangelogConfig } from "./config.ts";
 import { init } from "./init/index.ts";
 import { getReleasePage } from "./release-page.ts";
+import { createGitlabRelease } from "./gitlab-release.ts";
 import type { ChangelogConfig } from "./changelog/types.ts";
 import type { ReleaseContext } from "./types.ts";
 import pkg from "../package.json" with { type: "json" };
@@ -429,13 +430,30 @@ const main = defineCommand({
                 target: branch,
               });
               ctx.notesInReleasePage = page.includesNotes;
+              let url = page.url;
+
+              // GitLab's page cannot be prefilled with notes, so create the release through the
+              // API and open its edit page. If that fails, open the empty page and print the notes.
+              if (provider === "gitlab" && !preview) {
+                try {
+                  url = await createGitlabRelease(repo, changelogConfig?.gitlabToken, {
+                    version: ctx.version,
+                    changelog: ctx.changelog,
+                  });
+                  ctx.notesInReleasePage = true;
+                } catch (error: unknown) {
+                  console.warn(
+                    pc.yellow(`✗ Could not create the GitLab release: ${(error as Error).message}`),
+                  );
+                }
+              }
 
               try {
-                await openUrl(page.url);
+                await openUrl(url);
               } catch (error: unknown) {
                 console.warn(pc.yellow(`✗ Failed to open browser: ${(error as Error).message}`));
                 console.warn(pc.yellow("Please open the following URL in your browser:"));
-                console.warn(pc.yellow(page.url));
+                console.warn(pc.yellow(url));
               }
             },
           },
@@ -452,7 +470,7 @@ const main = defineCommand({
 
       await tasks.run(ctx);
 
-      // GitLab's release page cannot be prefilled with notes, so print them for pasting
+      // The empty GitLab page (preview, or no API access) needs the notes pasted by hand
       if (!ctx.notesInReleasePage) {
         console.log("");
         console.log(pc.bold("Release notes (paste them into the release form):"));

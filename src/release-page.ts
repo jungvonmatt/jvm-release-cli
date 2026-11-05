@@ -19,8 +19,9 @@ export interface ReleaseDetails {
  * Builds the URL of the "new release" page.
  *
  * GitHub opens a draft prefilled with tag, title, notes and the prerelease flag.
- * GitLab has no drafts, and its page can only be prefilled with the tag (`tag_name`),
- * so the notes must be pasted by hand.
+ * GitLab has no drafts, and its page can only be prefilled with the tag (`tag_name`).
+ * The CLI creates GitLab releases through the API instead (see `gitlab-release.ts`), and
+ * opens this page only as the fallback, where the notes must be pasted by hand.
  */
 export function getReleasePage(
   repo: RemoteRepository,
