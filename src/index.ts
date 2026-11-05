@@ -3,8 +3,9 @@
 // and opens the release page.
 //
 // It is designed for regular releases from the release branch (`--branch`, default: main).
-// A production release merges the version bump into the release branch, which can conflict
-// with a hotfix flow, so the CLI asks before it continues on a `hotfix/*` branch.
+// A production release promotes the newest prerelease when one is pending, and merges that
+// version bump into the release branch. This can conflict with a hotfix flow, so the CLI asks
+// before it continues on a `hotfix/*` branch.
 
 import { exec } from "node:child_process";
 import { resolve } from "node:path";
@@ -29,6 +30,7 @@ import {
   getPackageVersion,
   getLatestTag,
   getLatestReleaseTag,
+  commitLogFromRevision,
   INITIAL_VERSION,
 } from "./git.ts";
 import { isPromptCancel, parseReleaseTarget, ui } from "./ui.ts";
@@ -133,7 +135,7 @@ const main = defineCommand({
         process.exit(0);
       }
 
-      const { version, latestTag, latestReleaseTag } = result;
+      const { version, latestTag, latestReleaseTag, promotedTag } = result;
 
       console.log("");
       console.log(
@@ -144,6 +146,21 @@ const main = defineCommand({
       console.log("");
       console.log(pc.dim(`  Current live version: ${pc.cyan(latestReleaseTag)}`));
       console.log(pc.dim(`  Current test version: ${pc.cyan(latestTag)}`));
+      // Say what a production release contains, because newer commits can stay unreleased
+      if (!semver.prerelease(version)) {
+        if (promotedTag) {
+          const newer = (await commitLogFromRevision(promotedTag)).split("\n").filter(Boolean);
+          const unreleased =
+            newer.length === 1 ? "1 newer commit stays" : `${newer.length} newer commits stay`;
+          console.log(
+            pc.dim(
+              `  Promotes ${pc.cyan(promotedTag)}.${newer.length > 0 ? ` ${unreleased} unreleased.` : ""}`,
+            ),
+          );
+        } else {
+          console.log(pc.dim(`  Releases the tip of ${branch}, because no prerelease is pending.`));
+        }
+      }
       console.log("");
 
       // Check if running from a hotfix branch
@@ -228,6 +245,31 @@ const main = defineCommand({
         },
       ]);
 
+      /**
+       * Bumps the version on the current branch with `pnpm version`, which commits and tags it.
+       */
+      const bumpOnCurrentBranch = async (): Promise<void> => {
+        const pkgVersion = version.replace("v", "");
+        if (preview) {
+          console.log(pc.yellow(`pnpm version ${pkgVersion} --no-commit-hooks`));
+          return;
+        }
+
+        await execa(`pnpm version ${pkgVersion} --no-commit-hooks`);
+        // verify the new version tag was created
+        if (!(await hasTag(version))) {
+          throw new Error(`Failed to create new version tag ${version}`);
+        }
+
+        // verify the package.json version was updated
+        const packageVersion = await getPackageVersion(root);
+        if (semver.compare(packageVersion, version) !== 0) {
+          throw new Error(
+            `Failed to update package.json version. Expected ${version} but got ${packageVersion}`,
+          );
+        }
+      };
+
       const bumpVersion = new Listr([
         {
           title: `Creating new release version ${version}`,
@@ -235,10 +277,17 @@ const main = defineCommand({
           task: async () => {
             ctx.isPrerelease = false;
 
+            // Without a pending prerelease, release the tip of the release branch
+            if (!promotedTag) {
+              await bumpOnCurrentBranch();
+              ctx.version = version;
+              return;
+            }
+
             const pkgVersion = version.replace("v", "");
             const releaseBranch = `release/tmp-${version}`;
             if (preview) {
-              console.log(pc.yellow(`git switch -c "${releaseBranch}" "${latestTag}^{commit}"`));
+              console.log(pc.yellow(`git switch -c "${releaseBranch}" "${promotedTag}^{commit}"`));
               console.log(pc.yellow(`pnpm version ${pkgVersion} --no-commit-hooks`));
               console.log(pc.yellow(`git switch "${branch}"`));
               console.log(
@@ -248,7 +297,7 @@ const main = defineCommand({
             } else {
               try {
                 // create a temporary release branch
-                await execa(`git switch -c "${releaseBranch}" "${latestTag}^{commit}"`);
+                await execa(`git switch -c "${releaseBranch}" "${promotedTag}^{commit}"`);
                 // bump version (package/git) using pnpm
                 await execa(`pnpm version ${pkgVersion} --no-commit-hooks`);
                 // switch to the release branch
@@ -260,7 +309,7 @@ const main = defineCommand({
                   const suggestedVersion = `v${semver.inc(branchVersion, "patch")}`;
                   throw new Error(
                     `Cannot release ${version}: ${branch} branch is already at v${branchVersion}.\n` +
-                      `Your branch is based on ${latestTag}.\n\n` +
+                      `Your branch is based on ${promotedTag}.\n\n` +
                       `Suggested solutions:\n` +
                       `1. Merge your changes into ${branch} first, then run the release from ${branch}\n` +
                       `2. Use a higher version number like ${suggestedVersion}\n` +
@@ -302,27 +351,7 @@ const main = defineCommand({
           skip: () => !semver.prerelease(version),
           task: async () => {
             ctx.isPrerelease = true;
-
-            const pkgVersion = version.replace("v", "");
-            if (preview) {
-              console.log(pc.yellow(`pnpm version ${pkgVersion} --no-commit-hooks`));
-            } else {
-              // bump version (package/git) using pnpm
-              await execa(`pnpm version ${pkgVersion} --no-commit-hooks`);
-              // verify the new version tag was created
-              if (!(await hasTag(version))) {
-                throw new Error(`Failed to create new version tag ${version}`);
-              }
-
-              // verify the package.json version was updated
-              const packageVersion = await getPackageVersion(root);
-              if (semver.compare(packageVersion, version) !== 0) {
-                throw new Error(
-                  `Failed to update package.json version. Expected ${version} but got ${packageVersion}`,
-                );
-              }
-            }
-
+            await bumpOnCurrentBranch();
             ctx.version = version;
           },
         },
@@ -359,9 +388,9 @@ const main = defineCommand({
             task: async () => {
               const prereleaseTarget = preview ? "HEAD" : `tags/${ctx.version}`;
               const releaseTarget = preview
-                ? latestTag === INITIAL_VERSION
-                  ? "HEAD"
-                  : `tags/${latestTag}`
+                ? promotedTag
+                  ? `tags/${promotedTag}`
+                  : "HEAD"
                 : `tags/${ctx.version}`;
 
               const fromTag = ctx.isPrerelease ? latestTag : latestReleaseTag;

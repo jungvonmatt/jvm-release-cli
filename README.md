@@ -60,7 +60,7 @@ When you run `jvm-release`, it:
 
 1. **Validates prerequisites** — confirms you are on the release branch, the working tree is clean, and the remote history is up to date
 2. **Prompts for a target** (unless passed as an argument) — shows the computed next test and production versions
-3. **Bumps the version** — runs `pnpm version` and creates a git tag
+3. **Bumps the version** — runs `pnpm version` and creates a git tag. A test release tags the tip of the release branch. A production release promotes the newest test release when one is newer than the last production release, so the tested state goes live. Newer commits stay unreleased. Without a pending test release, a production release tags the tip of the release branch.
 4. **Runs tests** — executes the project's test suite (skipped with `--no-tests`)
 5. **Generates a changelog** — builds a Jira-enriched Markdown changelog for the tag range
 6. **Pushes to origin** — pushes the commit and tag
@@ -68,7 +68,7 @@ When you run `jvm-release`, it:
 
 On any failure, the CLI automatically rolls back: the version commit is removed, the tag is deleted, and any in-progress merge is aborted.
 
-> **Hotfix releases:** The CLI is designed for regular releases from the release branch. A production release merges the version bump into the release branch (`--branch`, default `main`), which can conflict with a hotfix flow. On a `hotfix/*` branch, the CLI warns and asks before it continues.
+> **Hotfix releases:** The CLI is designed for regular releases from the release branch. A production release that promotes a test release merges the version bump into the release branch (`--branch`, default `main`), which can conflict with a hotfix flow. On a `hotfix/*` branch, the CLI warns and asks before it continues.
 
 ## Configuration
 

@@ -27,6 +27,34 @@ export const parseReleaseTarget = (value: string | undefined): ReleaseTarget | u
 export const isPromptCancel = (error: unknown): boolean =>
   error instanceof Error && /force closed|SIGINT/i.test(error.message);
 
+export interface NextVersions {
+  prerelease: Version;
+  release: Version;
+  /** Prerelease tag that a production release promotes, or `null` to release the branch tip */
+  promotedTag: string | null;
+}
+
+/**
+ * Computes the next test and production versions from the latest tags.
+ *
+ * When a prerelease is newer than the last release, a production release promotes it, so the
+ * tested state goes live. Otherwise there is nothing to promote, and a production release
+ * releases the tip of the release branch.
+ */
+export const getNextVersions = (latestTag: string, latestReleaseTag: string): NextVersions => {
+  const promotedTag = semver.gt(latestTag, latestReleaseTag) ? latestTag : null;
+
+  return {
+    prerelease: promotedTag
+      ? new Version(latestTag, "prerelease")
+      : new Version(latestTag, "preminor"),
+    release: promotedTag
+      ? new Version(latestTag.replace(/-.*/, ""))
+      : new Version(latestReleaseTag, "minor"),
+    promotedTag,
+  };
+};
+
 /**
  * Interactive UI flow for selecting which version to publish.
  *
@@ -39,22 +67,17 @@ export const ui = async (
 ): Promise<ReleaseSelection | { cancelled: true; latestTag: string; latestReleaseTag: string }> => {
   const latestTag = await getLatestTag();
   const latestReleaseTag = await getLatestReleaseTag();
-
-  const newReleaseVersion =
-    semver.compare(latestReleaseTag, latestTag) < 0
-      ? new Version(latestTag.replace(/-.*/, ""))
-      : new Version(latestReleaseTag, "minor");
-
-  const newPrereleaseVersion =
-    semver.compare(latestReleaseTag, latestTag) >= 0
-      ? new Version(latestTag, "preminor")
-      : new Version(latestTag, "prerelease");
+  const {
+    prerelease: newPrereleaseVersion,
+    release: newReleaseVersion,
+    promotedTag,
+  } = getNextVersions(latestTag, latestReleaseTag);
 
   const hasCommits = await commitLogFromRevision(latestTag);
 
-  // for a production release, we don't need to confirm if there are no commits as
-  // we want to release the latest pre-release version which is the same as the production release
-  if (!hasCommits && target !== "production") {
+  // A production release that promotes a prerelease needs no new commits: it releases the
+  // commit of that prerelease
+  if (!hasCommits && !(target === "production" && promotedTag)) {
     const shouldContinue = await confirm({
       message: "No commits found since previous release, continue?",
       default: false,
@@ -72,6 +95,7 @@ export const ui = async (
   const result = {
     latestTag,
     latestReleaseTag,
+    promotedTag,
   };
 
   if (target) {

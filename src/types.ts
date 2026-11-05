@@ -11,6 +11,8 @@ export interface ReleaseContext {
 export interface ReleaseSelection {
   latestTag: string;
   latestReleaseTag: string;
+  /** Prerelease tag that a production release promotes, or `null` to release the branch tip */
+  promotedTag: string | null;
   version: string;
   target: ReleaseTarget;
 }
