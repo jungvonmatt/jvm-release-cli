@@ -224,8 +224,63 @@ export const deleteTemporaryBranch = async (
   await execa(`git branch -D "${branch}"`);
 };
 
-export const removeLastCommit = async (): Promise<void> => {
-  await execa("git reset --hard HEAD~1");
+/**
+ * Pushes the current branch and the version tag in one atomic push: `origin` takes both or
+ * neither. So a failed push never leaves the version commit on `origin` without its tag, and
+ * `undoRelease` can undo the whole release.
+ */
+export const pushRelease = async (tag: string): Promise<void> => {
+  await execa(`git push --atomic --no-verify origin HEAD "refs/tags/${tag}"`);
+};
+
+/** The state before a release, so that `undoRelease` can restore exactly that state. */
+export interface ReleaseStart {
+  /** Branch the release started on */
+  branch: string;
+  /** Commit of each branch the release can change: the start branch and the release branch */
+  heads: Record<string, string>;
+  /** Whether the version tag existed before the release */
+  tagExisted: boolean;
+}
+
+export const recordReleaseStart = async (
+  releaseBranch: string,
+  tag: string,
+): Promise<ReleaseStart> => {
+  const branch = await getCurrentBranch();
+  const heads: Record<string, string> = {};
+  for (const name of new Set([branch, releaseBranch])) {
+    try {
+      const { stdout } = await execa(`git rev-parse --verify -q "refs/heads/${name}"`);
+      heads[name] = stdout.trim();
+    } catch {
+      // The release branch does not exist, so the release cannot change it
+    }
+  }
+  return { branch, heads, tagExisted: await hasTag(tag) };
+};
+
+/**
+ * Undoes a failed release: aborts a merge, resets each branch to its commit before the release,
+ * and deletes the version tag. It undoes only what the release did. A branch that did not move
+ * keeps its commits, and a tag that existed before stays.
+ */
+export const undoRelease = async (start: ReleaseStart, tag: string): Promise<void> => {
+  await abortMerge();
+
+  const current = await getCurrentBranch();
+  for (const [name, head] of Object.entries(start.heads)) {
+    if (name === current) {
+      // The working tree was clean before the release, so this drops only the release's changes
+      await execa(`git reset --hard ${head}`);
+    } else {
+      await execa(`git update-ref "refs/heads/${name}" ${head}`);
+    }
+  }
+
+  if (!start.tagExisted && (await hasTag(tag))) {
+    await deleteTag(tag);
+  }
 };
 
 /**

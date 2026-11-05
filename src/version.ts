@@ -45,6 +45,19 @@ const formatFirstDifference = (
   return parts.join(".");
 };
 
+/**
+ * Stops a release whose version is not higher than the version in package.json, before anything
+ * changes. `pnpm version` refuses the same version and would accept a lower one.
+ */
+export const verifyVersionIsNewer = (version: string, packageVersion: string): void => {
+  if (!semver.gt(version, packageVersion)) {
+    throw new Error(
+      `Cannot release ${version}: package.json is already at ${packageVersion}. ` +
+        `Tag v${packageVersion} first, or set package.json back to the version of the latest tag.`,
+    );
+  }
+};
+
 export default class Version {
   #version: SemVer;
   #diff: ReleaseType | null | undefined = undefined;

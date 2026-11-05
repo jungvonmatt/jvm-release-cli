@@ -2,7 +2,7 @@
 // `git check-ignore` does not report tracked files, even when `.gitignore` lists them.
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -11,6 +11,9 @@ import {
   getLatestTag,
   isGitIgnored,
   isGitTracked,
+  pushRelease,
+  recordReleaseStart,
+  undoRelease,
 } from "../src/git.ts";
 
 const originalCwd = process.cwd();
@@ -110,5 +113,137 @@ describe("getLatestTag", () => {
     git("tag", "v1.1.0");
 
     expect(await getLatestTag()).toBe("v1.1.0");
+  });
+});
+
+describe("undoRelease", () => {
+  const head = (ref = "HEAD") => gitOutput("rev-parse", ref);
+  const packageVersion = async () =>
+    (JSON.parse(await readFile(join(dir, "package.json"), "utf8")) as { version: string }).version;
+
+  beforeEach(async () => {
+    git("symbolic-ref", "HEAD", "refs/heads/main");
+    await writeFile(join(dir, "package.json"), '{ "version": "0.1.0" }\n');
+    git("add", "package.json");
+    git("commit", "-q", "-m", "init");
+    await writeFile(join(dir, "a.txt"), "a\n");
+    git("add", "a.txt");
+    git("commit", "-q", "-m", "PROJ-1 add a");
+  });
+
+  test("keeps the last commit when the failed release made no commit", async () => {
+    const before = head();
+    const start = await recordReleaseStart("main", "v0.1.0");
+
+    await undoRelease(start, "v0.1.0");
+
+    expect(head()).toBe(before);
+    expect(gitOutput("log", "--format=%s", "-1")).toBe("PROJ-1 add a");
+  });
+
+  test("discards a bump that failed before its commit", async () => {
+    const before = head();
+    const start = await recordReleaseStart("main", "v0.2.0");
+    await writeFile(join(dir, "package.json"), '{ "version": "0.2.0" }\n');
+
+    await undoRelease(start, "v0.2.0");
+
+    expect(head()).toBe(before);
+    expect(gitOutput("status", "--porcelain")).toBe("");
+    expect(await packageVersion()).toBe("0.1.0");
+  });
+
+  test("removes the bump commit and the tag of the release", async () => {
+    const before = head();
+    const start = await recordReleaseStart("main", "v0.2.0");
+    await writeFile(join(dir, "package.json"), '{ "version": "0.2.0" }\n');
+    git("commit", "-q", "-am", "0.2.0");
+    git("tag", "v0.2.0");
+
+    await undoRelease(start, "v0.2.0");
+
+    expect(head()).toBe(before);
+    expect(gitOutput("tag", "--list")).toBe("");
+    expect(gitOutput("log", "--format=%s")).not.toContain("0.2.0");
+    expect(await packageVersion()).toBe("0.1.0");
+  });
+
+  test("keeps a tag that existed before the release", async () => {
+    git("tag", "v0.2.0");
+    const start = await recordReleaseStart("main", "v0.2.0");
+
+    await undoRelease(start, "v0.2.0");
+
+    expect(gitOutput("tag", "--list")).toBe("v0.2.0");
+  });
+
+  test("resets the release branch when the release started on another branch", async () => {
+    git("branch", "integration");
+    const before = head("integration");
+    const start = await recordReleaseStart("integration", "v0.2.0");
+    // a promotion merges the bump into the release branch, then switches back
+    git("switch", "-q", "integration");
+    git("commit", "-q", "--allow-empty", "-m", "Merge release v0.2.0");
+    git("switch", "-q", "main");
+
+    await undoRelease(start, "v0.2.0");
+
+    expect(head("integration")).toBe(before);
+    expect(await getCurrentBranch()).toBe("main");
+  });
+
+  test("ignores a release branch that does not exist", async () => {
+    const start = await recordReleaseStart("does-not-exist", "v0.2.0");
+
+    expect(Object.keys(start.heads)).toEqual(["main"]);
+  });
+});
+
+describe("pushRelease", () => {
+  let origin: string;
+  const onOrigin = (...args: string[]) => gitOutput(`--git-dir=${origin}`, ...args);
+
+  beforeEach(async () => {
+    origin = await mkdtemp(join(tmpdir(), "release-cli-origin-"));
+    git("init", "-q", "--bare", origin);
+    git("symbolic-ref", "HEAD", "refs/heads/main");
+    git("commit", "-q", "--allow-empty", "-m", "init");
+    git("remote", "add", "origin", origin);
+    git("push", "-q", "origin", "main");
+    git("commit", "-q", "--allow-empty", "-m", "0.2.0");
+    git("tag", "v0.2.0");
+  });
+
+  afterEach(async () => {
+    await rm(origin, { recursive: true, force: true });
+  });
+
+  test("pushes the version commit and the tag", async () => {
+    await pushRelease("v0.2.0");
+
+    expect(onOrigin("log", "--format=%s", "-1", "main")).toBe("0.2.0");
+    expect(onOrigin("tag", "--list")).toBe("v0.2.0");
+  });
+
+  test("pushes no version commit when origin rejects the tag", async () => {
+    // origin already has a different v0.2.0
+    git(`--git-dir=${origin}`, "tag", "v0.2.0", "main");
+
+    await expect(pushRelease("v0.2.0")).rejects.toThrow();
+
+    expect(onOrigin("log", "--format=%s", "-1", "main")).toBe("init");
+  });
+
+  test("pushes no tag when origin rejects the branch", async () => {
+    // someone else pushed to main in the meantime
+    git("switch", "-q", "-c", "other", "HEAD~1");
+    git("commit", "-q", "--allow-empty", "-m", "other");
+    git("push", "-q", "origin", "other:main");
+    git("switch", "-q", "main");
+
+    await expect(pushRelease("v0.2.0")).rejects.toThrow();
+
+    expect(onOrigin("log", "--format=%s", "-1", "main")).toBe("other");
+    expect(onOrigin("tag", "--list")).toBe("");
   });
 });

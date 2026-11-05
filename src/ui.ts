@@ -2,7 +2,12 @@ import { select, confirm } from "@inquirer/prompts";
 import semver from "semver";
 import pc from "picocolors";
 import Version from "./version.ts";
-import { getLatestReleaseTag, getLatestTag, commitLogFromRevision } from "./git.ts";
+import {
+  getLatestReleaseTag,
+  getLatestTag,
+  commitLogFromRevision,
+  INITIAL_VERSION,
+} from "./git.ts";
 import type { ReleaseTarget, ReleaseSelection } from "./types.ts";
 
 /**
@@ -34,6 +39,8 @@ export interface NextVersions {
   release: Version;
   /** Prerelease tag that a production release promotes, or `null` to release the branch tip */
   promotedTag: string | null;
+  /** Version that the next versions start from */
+  current: string;
 }
 
 /**
@@ -42,18 +49,28 @@ export interface NextVersions {
  * When a prerelease is newer than the last release, a production release promotes it, so the
  * tested state goes live. Otherwise there is nothing to promote, and a production release
  * releases the tip of the release branch.
+ *
+ * Without tags, the version in package.json is the current version, so a project at 0.1.0
+ * releases 0.2.0 next. That version has no tag, so there is nothing to promote.
  */
-export const getNextVersions = (latestTag: string, latestReleaseTag: string): NextVersions => {
-  const promotedTag = semver.gt(latestTag, latestReleaseTag) ? latestTag : null;
+export const getNextVersions = (
+  latestTag: string,
+  latestReleaseTag: string,
+  packageVersion = "0.0.0",
+): NextVersions => {
+  const untagged =
+    latestTag === INITIAL_VERSION &&
+    semver.valid(packageVersion) !== null &&
+    semver.gt(packageVersion, "0.0.0");
+  const current = untagged ? `v${semver.valid(packageVersion)}` : latestTag;
+  const releaseTag = untagged && !semver.prerelease(current) ? current : latestReleaseTag;
+  const pending = semver.gt(current, releaseTag);
 
   return {
-    prerelease: promotedTag
-      ? new Version(latestTag, "prerelease")
-      : new Version(latestTag, "preminor"),
-    release: promotedTag
-      ? new Version(latestTag.replace(/-.*/, ""))
-      : new Version(latestReleaseTag, "minor"),
-    promotedTag,
+    prerelease: pending ? new Version(current, "prerelease") : new Version(current, "preminor"),
+    release: pending ? new Version(current.replace(/-.*/, "")) : new Version(releaseTag, "minor"),
+    promotedTag: pending && !untagged ? current : null,
+    current,
   };
 };
 
@@ -66,6 +83,7 @@ export const getNextVersions = (latestTag: string, latestReleaseTag: string): Ne
  */
 export const ui = async (
   target: ReleaseTarget | undefined,
+  packageVersion?: string,
 ): Promise<ReleaseSelection | { cancelled: true; latestTag: string; latestReleaseTag: string }> => {
   const latestTag = await getLatestTag();
   const latestReleaseTag = await getLatestReleaseTag();
@@ -73,7 +91,8 @@ export const ui = async (
     prerelease: newPrereleaseVersion,
     release: newReleaseVersion,
     promotedTag,
-  } = getNextVersions(latestTag, latestReleaseTag);
+    current,
+  } = getNextVersions(latestTag, latestReleaseTag, packageVersion);
 
   const hasCommits = await commitLogFromRevision(latestTag);
 
@@ -114,7 +133,7 @@ export const ui = async (
 
     choices: [
       {
-        name: `Pre-release          ${pc.dim(latestTag)} -> ${newPrereleaseVersion.format()}`,
+        name: `Pre-release          ${pc.dim(current)} -> ${newPrereleaseVersion.format()}`,
         value: {
           ...result,
           version: newPrereleaseVersion.toString(),
@@ -122,7 +141,7 @@ export const ui = async (
         },
       },
       {
-        name: `Production release   ${pc.dim(latestTag)} -> ${newReleaseVersion.format({ color: "cyan" })}`,
+        name: `Production release   ${pc.dim(current)} -> ${newReleaseVersion.format({ color: "cyan" })}`,
         value: {
           ...result,
           version: newReleaseVersion.toString(),
