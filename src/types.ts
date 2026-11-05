@@ -1,4 +1,4 @@
-export type ReleaseTarget = "test" | "production";
+export type ReleaseTarget = "prerelease" | "production";
 
 export interface ReleaseContext {
   version: string;
