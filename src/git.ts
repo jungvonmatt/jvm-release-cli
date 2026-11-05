@@ -8,6 +8,7 @@ import { exec } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
+import semver from "semver";
 import type { GitProvider } from "./changelog/types.ts";
 
 const execa = promisify(exec);
@@ -177,17 +178,24 @@ export const verifyRemoteHistoryIsClean = async (): Promise<void> => {
 
 export const INITIAL_VERSION = "v0.0.0";
 
-export const getLatestTag = async (): Promise<string> => {
-  const { stdout } = await execa("git tag --sort=-v:refname | head -n 1");
-  return stdout.trim() || INITIAL_VERSION;
+/**
+ * Returns the tags that are SemVer versions, highest first. Sorts with semver, because git's
+ * version sort puts `v1.1.0-pre.0` above `v1.1.0`. Other tags are ignored.
+ */
+const getVersionTags = async (): Promise<string[]> => {
+  const { stdout } = await execa("git tag --list");
+  return stdout
+    .split("\n")
+    .map((tag) => tag.trim())
+    .filter((tag) => semver.valid(tag))
+    .sort(semver.rcompare);
 };
 
-export const getLatestReleaseTag = async (): Promise<string> => {
-  const { stdout } = await execa(
-    'git tag --sort=-v:refname | grep -E "^v?[0-9]+.[0-9]+.[0-9]+$" | head -n 1',
-  );
-  return stdout.trim() || INITIAL_VERSION;
-};
+export const getLatestTag = async (): Promise<string> =>
+  (await getVersionTags())[0] ?? INITIAL_VERSION;
+
+export const getLatestReleaseTag = async (): Promise<string> =>
+  (await getVersionTags()).find((tag) => !semver.prerelease(tag)) ?? INITIAL_VERSION;
 
 export const hasTag = async (tag: string): Promise<boolean> => {
   try {

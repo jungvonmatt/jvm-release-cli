@@ -5,13 +5,27 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { deleteTemporaryBranch, getCurrentBranch, isGitIgnored, isGitTracked } from "../src/git.ts";
+import {
+  deleteTemporaryBranch,
+  getCurrentBranch,
+  getLatestTag,
+  isGitIgnored,
+  isGitTracked,
+} from "../src/git.ts";
 
 const originalCwd = process.cwd();
 let dir: string;
 
+// Signing settings from the global git config would make `git tag` ask for a message
+const GIT_CONFIG = [
+  "user.name=test",
+  "user.email=test@test",
+  "commit.gpgSign=false",
+  "tag.gpgSign=false",
+];
+
 const git = (...args: string[]) =>
-  execFileSync("git", ["-c", "user.name=test", "-c", "user.email=test@test", ...args], {
+  execFileSync("git", [...GIT_CONFIG.flatMap((entry) => ["-c", entry]), ...args], {
     cwd: dir,
     stdio: "ignore",
   });
@@ -85,5 +99,16 @@ describe("deleteTemporaryBranch", () => {
 
     expect(await getCurrentBranch()).toBe("develop");
     expect(gitOutput("branch", "--list", "release/tmp-v1.1.0")).toBe("");
+  });
+});
+
+describe("getLatestTag", () => {
+  // git's version sort puts `v1.1.0-pre.0` above `v1.1.0`
+  test("ranks a release above its prerelease", async () => {
+    git("commit", "-q", "--allow-empty", "-m", "init");
+    git("tag", "v1.1.0-pre.0");
+    git("tag", "v1.1.0");
+
+    expect(await getLatestTag()).toBe("v1.1.0");
   });
 });

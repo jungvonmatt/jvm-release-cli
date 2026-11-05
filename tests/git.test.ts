@@ -180,6 +180,30 @@ describe("getLatestTag", () => {
     const { getLatestTag } = await import("../src/git.ts");
     expect(await getLatestTag()).toBe("v1.2.3");
   });
+
+  test("ranks a release above its prereleases", async () => {
+    mockExec("v1.0.0\nv1.1.0\nv1.1.0-pre.0\nv1.1.0-pre.1\n");
+    const { getLatestTag } = await import("../src/git.ts");
+    expect(await getLatestTag()).toBe("v1.1.0");
+  });
+
+  test("compares prerelease numbers as numbers", async () => {
+    mockExec("v1.1.0-pre.10\nv1.1.0-pre.2\nv1.1.0-pre.9\n");
+    const { getLatestTag } = await import("../src/git.ts");
+    expect(await getLatestTag()).toBe("v1.1.0-pre.10");
+  });
+
+  test("ignores tags that are not versions", async () => {
+    mockExec("latest\nv1.0.0\nzz-deploy\n");
+    const { getLatestTag } = await import("../src/git.ts");
+    expect(await getLatestTag()).toBe("v1.0.0");
+  });
+
+  test("returns the initial version when no tag is a version", async () => {
+    mockExec("latest\n");
+    const { getLatestTag } = await import("../src/git.ts");
+    expect(await getLatestTag()).toBe("v0.0.0");
+  });
 });
 
 describe("getLatestReleaseTag", () => {
@@ -187,6 +211,12 @@ describe("getLatestReleaseTag", () => {
     mockExec("v1.2.3\n");
     const { getLatestReleaseTag } = await import("../src/git.ts");
     expect(await getLatestReleaseTag()).toBe("v1.2.3");
+  });
+
+  test("skips prereleases", async () => {
+    mockExec("v1.0.0\nv1.1.0-pre.0\n");
+    const { getLatestReleaseTag } = await import("../src/git.ts");
+    expect(await getLatestReleaseTag()).toBe("v1.0.0");
   });
 });
 
