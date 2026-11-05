@@ -58,15 +58,15 @@ jvm-release --version       # print the CLI version
 
 When you run `jvm-release`, it:
 
-1. **Validates prerequisites** — confirms you are on the release branch, the working tree is clean, and the remote history is up to date
-2. **Prompts for a target** (unless passed as an argument) — shows the computed next pre-release and production versions
+1. **Validates prerequisites** — confirms you are on the release branch, the working tree is clean, the remote history is up to date, and the new version is higher than the version in `package.json`
+2. **Prompts for a target** (unless passed as an argument) — shows the computed next pre-release and production versions. Without tags, the CLI starts from the version in `package.json`, so a project at 0.1.0 releases 0.2.0 next.
 3. **Bumps the version** — runs `pnpm version` and creates a git tag. A pre-release tags the tip of the release branch. A production release promotes the newest pre-release when one is newer than the last production release, so the tested state goes live. Newer commits stay unreleased. Without a pending pre-release, a production release tags the tip of the release branch.
 4. **Runs tests** — executes the project's test suite (skipped with `--no-tests`)
 5. **Generates a changelog** — builds a Jira-enriched Markdown changelog for the tag range
-6. **Pushes to origin** — pushes the commit and tag
+6. **Pushes to origin** — pushes the commit and the tag in one atomic push, so `origin` gets both or neither
 7. **Opens the release page** — on GitHub, a release draft pre-filled with tag, title and changelog. GitLab cannot pre-fill its page, and it has no drafts. So the CLI creates the GitLab release with the changelog through the API, with `gitlabToken` or the `glab` login, and opens its edit page. The release is public right away. Without a token or `glab`, or if GitLab refuses the request, the CLI opens the empty page and prints the changelog for you to paste. `--preview` creates no release.
 
-On any failure, the CLI automatically rolls back: the version commit is removed, the tag is deleted, and any in-progress merge is aborted.
+If the release fails, the CLI rolls back automatically. It aborts a merge in progress, resets the branches to their commits from before the release, and deletes the tag that the release created. Commits and tags that existed before the release stay.
 
 > **Hotfix releases:** The CLI is designed for regular releases from the release branch. A production release that promotes a pre-release merges the version bump into the release branch (`--branch`, default `main`), which can conflict with a hotfix flow. On a `hotfix/*` branch, the CLI warns and asks before it continues.
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
-import Version, { SEMVER_INCREMENTS } from "../src/version.ts";
+import Version, { SEMVER_INCREMENTS, verifyVersionIsNewer } from "../src/version.ts";
 
 describe("Version - constructor", () => {
   test("creates version from string", () => {
@@ -235,5 +235,24 @@ describe("SEMVER_INCREMENTS", () => {
     expect(SEMVER_INCREMENTS).toContain("premajor");
     expect(SEMVER_INCREMENTS).toContain("prerelease");
     expect(SEMVER_INCREMENTS).toHaveLength(7);
+  });
+});
+
+describe("verifyVersionIsNewer", () => {
+  test("accepts a version above package.json", () => {
+    expect(() => verifyVersionIsNewer("v1.2.0", "1.1.0")).not.toThrow();
+    expect(() => verifyVersionIsNewer("v1.1.0", "1.1.0-pre.3")).not.toThrow();
+  });
+
+  test("stops when package.json is already at the version", () => {
+    expect(() => verifyVersionIsNewer("v0.1.0", "0.1.0")).toThrow(
+      "Cannot release v0.1.0: package.json is already at 0.1.0.",
+    );
+  });
+
+  test("stops when package.json is above the version", () => {
+    expect(() => verifyVersionIsNewer("v1.2.0", "1.3.0")).toThrow(
+      "Cannot release v1.2.0: package.json is already at 1.3.0.",
+    );
   });
 });

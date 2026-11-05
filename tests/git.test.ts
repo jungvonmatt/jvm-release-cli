@@ -246,18 +246,6 @@ describe("deleteTag", () => {
   });
 });
 
-describe("removeLastCommit", () => {
-  test("calls git reset --hard HEAD~1", async () => {
-    mockExec("");
-    const { removeLastCommit } = await import("../src/git.ts");
-    await removeLastCommit();
-    expect(execMock).toHaveBeenCalledWith(
-      expect.stringContaining("git reset --hard HEAD~1"),
-      expect.any(Function),
-    );
-  });
-});
-
 describe("abortMerge", () => {
   test("aborts merge when conflict markers present", async () => {
     mockExecSequence([

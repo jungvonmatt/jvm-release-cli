@@ -22,10 +22,10 @@ import {
   getRemoteRepository,
   detectProvider,
   hasTag,
-  deleteTag,
   deleteTemporaryBranch,
-  removeLastCommit,
-  abortMerge,
+  pushRelease,
+  recordReleaseStart,
+  undoRelease,
   getCurrentBranch,
   getPackageVersion,
   getLatestTag,
@@ -34,6 +34,7 @@ import {
   INITIAL_VERSION,
 } from "./git.ts";
 import { isPromptCancel, parseReleaseTarget, ui } from "./ui.ts";
+import { verifyVersionIsNewer } from "./version.ts";
 import { generateChangelog } from "./changelog/index.ts";
 import { loadChangelogConfig } from "./config.ts";
 import { init } from "./init/index.ts";
@@ -127,7 +128,9 @@ const main = defineCommand({
       // Loaded by the changelog task, reused by the release page task
       let changelogConfig: ChangelogConfig | undefined;
 
-      const result = await ui(releaseTarget);
+      // Without tags, the version in package.json is the starting point
+      const packageVersion = await getPackageVersion(root).catch(() => undefined);
+      const result = await ui(releaseTarget, packageVersion);
 
       if ("cancelled" in result) {
         console.log("");
@@ -146,6 +149,11 @@ const main = defineCommand({
       );
       console.log("");
       console.log(pc.dim(`  Current live version: ${pc.cyan(latestReleaseTag)}`));
+      if (latestTag === INITIAL_VERSION && packageVersion && packageVersion !== "0.0.0") {
+        console.log(
+          pc.dim(`  No tags yet, so the CLI starts from ${packageVersion} in package.json.`),
+        );
+      }
       if (promotedTag) {
         console.log(pc.dim(`  Current pre-release:  ${pc.cyan(promotedTag)}`));
       }
@@ -195,39 +203,16 @@ const main = defineCommand({
         console.log("");
       }
 
+      // Remember the branches and the tag, so a failed release can undo exactly its own changes
+      const start = await recordReleaseStart(branch, version);
+
       /**
        * Rolls back the project to its previous state.
        */
       const rollback = async (): Promise<void> => {
         console.log("\nPublish failed. Rolling back to the previous state…");
-        const versionWithoutPrefix = version.slice(1);
-
         try {
-          // First, abort any in-progress merge to clean up the working tree
-          await abortMerge();
-
-          // Try to get package version, but handle the case where package.json might be corrupted
-          let currentPackageVersion: string | null;
-          try {
-            currentPackageVersion = await getPackageVersion(root);
-          } catch {
-            currentPackageVersion = null;
-          }
-
-          // Verify that the package's version has been bumped before deleting the last tag and commit.
-          if (
-            currentPackageVersion &&
-            versionWithoutPrefix === currentPackageVersion &&
-            versionWithoutPrefix !== latestTag.slice(1) &&
-            versionWithoutPrefix !== latestReleaseTag.slice(1)
-          ) {
-            await removeLastCommit();
-          }
-
-          if (await hasTag(version)) {
-            await deleteTag(version);
-          }
-
+          await undoRelease(start, version);
           console.log("Successfully rolled back the project to its previous state.");
         } catch (error: unknown) {
           console.log(`Couldn't roll back because of the following error:\n${String(error)}`);
@@ -247,6 +232,11 @@ const main = defineCommand({
         {
           title: "Check remote history",
           task: () => verifyRemoteHistoryIsClean(),
+        },
+        {
+          title: "Check package version",
+          skip: () => !packageVersion,
+          task: () => verifyVersionIsNewer(version, packageVersion!),
         },
       ]);
 
@@ -363,11 +353,7 @@ const main = defineCommand({
         {
           title: "Pushing changes and tags to origin",
           skip: () => preview,
-          task: async () => {
-            // push the changes and tags to origin, first changes, then the tag
-            await execa("git push origin HEAD --no-verify");
-            await execa("git push origin --follow-tags --no-verify");
-          },
+          task: () => pushRelease(version),
         },
       ]);
 

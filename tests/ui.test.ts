@@ -57,3 +57,46 @@ describe("getNextVersions", () => {
     });
   });
 });
+
+describe("getNextVersions without tags", () => {
+  const next = (packageVersion: string) => {
+    const { prerelease, release, promotedTag, current } = getNextVersions(
+      "v0.0.0",
+      "v0.0.0",
+      packageVersion,
+    );
+    return { prerelease: prerelease.toString(), release: release.toString(), promotedTag, current };
+  };
+
+  test("starts from the version in package.json", () => {
+    expect(next("0.1.0")).toEqual({
+      prerelease: "v0.2.0-pre.0",
+      release: "v0.2.0",
+      promotedTag: null,
+      current: "v0.1.0",
+    });
+  });
+
+  test("continues an untagged pre-release in package.json, without a tag to promote", () => {
+    expect(next("0.3.0-pre.1")).toEqual({
+      prerelease: "v0.3.0-pre.2",
+      release: "v0.3.0",
+      promotedTag: null,
+      current: "v0.3.0-pre.1",
+    });
+  });
+
+  test("starts at 0.1.0 when package.json is at 0.0.0", () => {
+    expect(next("0.0.0")).toEqual({
+      prerelease: "v0.1.0-pre.0",
+      release: "v0.1.0",
+      promotedTag: null,
+      current: "v0.0.0",
+    });
+  });
+
+  test("ignores package.json once there are tags", () => {
+    const { release } = getNextVersions("v1.1.0", "v1.1.0", "5.0.0");
+    expect(release.toString()).toBe("v1.2.0");
+  });
+});
