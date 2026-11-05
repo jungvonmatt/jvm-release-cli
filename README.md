@@ -14,7 +14,7 @@ A general-purpose release preparation CLI for git-based projects. Automates vers
 - **Revert detection** — excludes reverted commits (odd revert depth = excluded, even = kept)
 - **Pull/merge request links** — adds GitHub PR or GitLab MR links and author handles to the changelog, via an API token or the `gh` / `glab` CLI
 - **Graceful degradation** — works without Jira credentials (falls back to raw commit list)
-- **Release pages** — opens a pre-filled GitHub release draft, or the GitLab "new release" page, in your browser after a successful release
+- **Release pages** — after a successful release, opens a pre-filled GitHub release draft, or creates the GitLab release with the changelog and opens its edit page
 - **Preview mode** — dry-run that prints all git commands without executing them
 - **Rollback support** — automatic cleanup of tags and version bump commits on failure
 - **Hotfix awareness** — warns and asks before it continues on a `hotfix/*` branch
@@ -64,7 +64,7 @@ When you run `jvm-release`, it:
 4. **Runs tests** — executes the project's test suite (skipped with `--no-tests`)
 5. **Generates a changelog** — builds a Jira-enriched Markdown changelog for the tag range
 6. **Pushes to origin** — pushes the commit and tag
-7. **Opens the release page** — on GitHub, a release draft pre-filled with tag, title and changelog. GitLab can only pre-fill the tag, so the CLI also prints the changelog for you to paste.
+7. **Opens the release page** — on GitHub, a release draft pre-filled with tag, title and changelog. GitLab cannot pre-fill its page, and it has no drafts. So the CLI creates the GitLab release with the changelog through the API, with `gitlabToken` or the `glab` login, and opens its edit page. The release is public right away. Without a token or `glab`, or if GitLab refuses the request, the CLI opens the empty page and prints the changelog for you to paste. `--preview` creates no release.
 
 On any failure, the CLI automatically rolls back: the version commit is removed, the tag is deleted, and any in-progress merge is aborted.
 
@@ -120,10 +120,10 @@ To write the config by hand, create one of the following files (resolved by `@ju
   // Optional: regex used to extract ticket IDs from commit messages (default: [A-Z]+-\d+)
   "ticketPattern": "((PROJ|TEAM)-[0-9]{3,})",
 
-  // Optional: API tokens for pull/merge request links.
+  // Optional: API tokens for pull/merge request links and GitLab releases.
   // Without a token, the CLI uses `gh` (GitHub) or `glab` (GitLab) if it is installed and logged in.
   "githubToken": "ghp_...",
-  "gitlabToken": "glpat-...",
+  "gitlabToken": "glpat-...", // needs the `api` scope to create releases
 
   // Optional: provider of the `origin` remote. Detected from the host name ("github"/"gitlab").
   // Set it for self-hosted instances whose host name contains neither word.
@@ -145,14 +145,14 @@ To write the config by hand, create one of the following files (resolved by `@ju
 
 All config values can be provided via environment variables. This is the recommended approach for CI. The CLI also loads a `.env` file from the working directory.
 
-| Environment variable         | Config key     | Description                                     |
-| ---------------------------- | -------------- | ----------------------------------------------- |
-| `CHANGELOG_JIRA_BASEURL`     | `jiraBaseUrl`  | Jira base URL                                   |
-| `CHANGELOG_JIRA_API_HOST`    | `jiraApiHost`  | Jira API host (defaults to `jiraBaseUrl`)       |
-| `CHANGELOG_JIRA_API_EMAIL`   | `jiraApiEmail` | Jira API email for Basic Auth                   |
-| `CHANGELOG_JIRA_API_TOKEN`   | `jiraApiToken` | Jira API token for Basic Auth                   |
-| `CHANGELOG_GITHUB_API_TOKEN` | `githubToken`  | GitHub token for pull request links (optional)  |
-| `CHANGELOG_GITLAB_API_TOKEN` | `gitlabToken`  | GitLab token for merge request links (optional) |
+| Environment variable         | Config key     | Description                                                  |
+| ---------------------------- | -------------- | ------------------------------------------------------------ |
+| `CHANGELOG_JIRA_BASEURL`     | `jiraBaseUrl`  | Jira base URL                                                |
+| `CHANGELOG_JIRA_API_HOST`    | `jiraApiHost`  | Jira API host (defaults to `jiraBaseUrl`)                    |
+| `CHANGELOG_JIRA_API_EMAIL`   | `jiraApiEmail` | Jira API email for Basic Auth                                |
+| `CHANGELOG_JIRA_API_TOKEN`   | `jiraApiToken` | Jira API token for Basic Auth                                |
+| `CHANGELOG_GITHUB_API_TOKEN` | `githubToken`  | GitHub token for pull request links (optional)               |
+| `CHANGELOG_GITLAB_API_TOKEN` | `gitlabToken`  | GitLab token for merge request links and releases (optional) |
 
 **Behavior by environment:**
 
