@@ -1,4 +1,6 @@
 import type { JiraTicket, ChangelogConfig } from "./types.ts";
+import { isCI } from "../ci.ts";
+import { ENV_VARS } from "../config.ts";
 
 /**
  * Checks the Jira credentials with `GET /rest/api/2/myself`, which Jira Cloud and Data Center
@@ -42,8 +44,12 @@ export async function fetchJiraTickets(
   const token = config.jiraApiToken;
 
   if (!host || !email || !token) {
+    // `init` asks questions, so a CI job sets the environment variables instead
+    const setup = isCI()
+      ? `Set ${ENV_VARS.jiraApiEmail} and ${ENV_VARS.jiraApiToken} in the CI variables.`
+      : "Run `jvm-release init` to set them up.";
     console.warn(
-      "⚠️  Jira credentials not configured. Falling back to raw commit summaries. Run `jvm-release init` to set them up.",
+      `⚠️  Jira credentials not configured. Falling back to raw commit summaries. ${setup}`,
     );
     return result;
   }

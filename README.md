@@ -18,6 +18,7 @@ A general-purpose release preparation CLI for git-based projects. Automates vers
 - **Preview mode** — dry-run that prints all git commands without executing them
 - **Rollback support** — automatic cleanup of tags and version bump commits on failure
 - **Hotfix awareness** — warns and asks before it continues on a `hotfix/*` branch
+- **CI-ready** — runs unattended in GitLab CI, see [Running in GitLab CI](#running-in-gitlab-ci)
 
 ## Requirements
 
@@ -64,7 +65,7 @@ When you run `jvm-release`, it:
 4. **Runs tests** — executes the project's test suite (skipped with `--no-tests`)
 5. **Generates a changelog** — builds a Jira-enriched Markdown changelog for the tag range
 6. **Pushes to origin** — pushes the commit and the tag in one atomic push, so `origin` gets both or neither
-7. **Opens the release page** — on GitHub, a release draft pre-filled with tag, title and changelog. GitLab cannot pre-fill its page, and it has no drafts. So the CLI creates the GitLab release with the changelog through the API, with `gitlabToken` or the `glab` login, and opens its edit page. The release is public right away. Without a token or `glab`, or if GitLab refuses the request, the CLI opens the empty page and prints the changelog for you to paste. `--preview` creates no release.
+7. **Opens the release page** (in CI, prints its URL) — on GitHub, a release draft pre-filled with tag, title and changelog. GitLab cannot pre-fill its page, and it has no drafts. So the CLI creates the GitLab release with the changelog through the API, with `gitlabToken` or the `glab` login, and opens its edit page. The release is public right away. Without a token or `glab`, or if GitLab refuses the request, the CLI opens the empty page and prints the changelog for you to paste. `--preview` creates no release.
 
 If the release fails, the CLI rolls back automatically. It aborts a merge in progress, resets the branches to their commits from before the release, and deletes the tag that the release created. Commits and tags that existed before the release stay.
 
@@ -158,6 +159,81 @@ All config values can be provided via environment variables. This is the recomme
 
 - **Local (non-CI):** missing values do not stop the release. The changelog falls back to raw commit summaries, and the CLI suggests `jvm-release init`.
 - **CI (`CI=true`):** missing `jiraBaseUrl` throws a hard error with an actionable message listing all missing fields.
+
+## Running in GitLab CI
+
+The CLI runs unattended when `CI` is set. GitLab CI sets it in every job. In CI, the CLI:
+
+- Never asks a question. If it would ask, it stops with an error: without a target argument, without new commits, on a `hotfix/*` branch, and for `jvm-release init`.
+- Prints the release page URL to the job log instead of opening a browser.
+- Prints one log line per step instead of animated spinners.
+- Creates the GitLab release through the REST API with `CHANGELOG_GITLAB_API_TOKEN`, so the job needs no `glab`. In a GitLab CI job, it uses the API URL of the job's instance (`CI_API_V4_URL`).
+
+### What the CLI checks, and what the job does
+
+A GitLab CI checkout is not ready for a release. The CLI checks each problem before it changes anything, and stops with the command that fixes it. The job script must do the fix.
+
+| Problem in a default CI checkout                                     | CLI check                      | Fix in the job                                                       |
+| -------------------------------------------------------------------- | ------------------------------ | -------------------------------------------------------------------- |
+| Shallow clone: tags and history are missing, so the version is wrong | Stops before it reads the tags | `GIT_DEPTH: 0`                                                       |
+| Detached HEAD: no branch to commit to                                | Stops before the release       | `git checkout -B <branch> origin/<branch>`                           |
+| No git user for the version commit                                   | "Check git user"               | `git config user.name` and `git config user.email`                   |
+| `origin` uses `CI_JOB_TOKEN`, which cannot push                      | "Check push access"            | `git remote set-url origin` with a token that has `write_repository` |
+| Tags from other branches are missing                                 | none                           | `git fetch --tags --force origin <branch>`                           |
+
+### Token
+
+Create a project access token, for example "Release Bot", with these scopes:
+
+- `write_repository`, to push the version commit and the tag
+- `api`, to create the release
+
+If the release branch is protected, add the token's bot user to "Allowed to push and merge" for that branch. If version tags are protected, also allow the bot user to create them. Store the token as a masked CI/CD variable, for example `RELEASE_BOT_TOKEN`.
+
+### Example job
+
+This example releases from the `integration` branch with two manual jobs. Each job pushes the version commit to `integration` and the tag in one atomic push. The tag then starts the deploy pipeline.
+
+```yaml
+.release:
+  stage: release
+  image: node:22
+  # One release at a time
+  resource_group: release
+  variables:
+    GIT_DEPTH: 0 # full history, so the CLI sees all tags
+    GIT_STRATEGY: clone # no local branches or tags from an earlier job
+    CHANGELOG_GITLAB_API_TOKEN: $RELEASE_BOT_TOKEN
+    # Set CHANGELOG_JIRA_BASEURL, CHANGELOG_JIRA_API_EMAIL and
+    # CHANGELOG_JIRA_API_TOKEN as CI/CD variables, or commit .release-clirc.json
+  rules:
+    - if: $CI_COMMIT_BRANCH == "integration"
+      when: manual
+  before_script:
+    - corepack enable
+    - pnpm install --frozen-lockfile
+    - git config user.name "Release Bot"
+    - git config user.email "release-bot@noreply.${CI_SERVER_HOST}"
+    - git remote set-url origin "https://release-bot:${RELEASE_BOT_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git fetch --tags --force origin integration
+    - git checkout -B integration origin/integration
+
+release:prerelease:
+  extends: .release
+  script:
+    - pnpm exec jvm-release prerelease --branch integration --no-tests
+
+release:production:
+  extends: .release
+  script:
+    - pnpm exec jvm-release production --branch integration --no-tests
+```
+
+Notes:
+
+- The job releases the current tip of `origin/integration`, not the commit of the pipeline that runs the job. A production release promotes the newest pre-release.
+- The version commit starts a new `integration` pipeline. The release jobs are manual, so this does not start a new release.
+- If the GitLab release cannot be created, the job log shows the reason and the release notes. The tag is pushed at that point, so do not run the job again. Create the release by hand instead.
 
 ## How the changelog works
 

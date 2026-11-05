@@ -9,11 +9,32 @@ export interface GitlabRelease {
 }
 
 /**
+ * Returns the base URL of the GitLab REST API for `repo`. In a GitLab CI job on the same
+ * instance it is `CI_API_V4_URL`, which also covers instances under a sub-path or on plain HTTP.
+ */
+export const getGitlabApiUrl = (
+  repo: RemoteRepository,
+  env: NodeJS.ProcessEnv = process.env,
+): string => {
+  const { CI_API_V4_URL: ciApiUrl, CI_SERVER_URL: ciServerUrl } = env;
+  if (ciApiUrl && ciServerUrl) {
+    try {
+      if (new URL(ciServerUrl).host === repo.host) {
+        return ciApiUrl.replace(/\/+$/, "");
+      }
+    } catch {
+      // Not a URL. Use the remote host.
+    }
+  }
+  return `https://${repo.host}/api/v4`;
+};
+
+/**
  * Creates a GitLab release with the changelog as its notes and returns the URL of its edit page.
  *
  * GitLab's "new release" page cannot be prefilled with notes, so the CLI creates the release
  * through the API instead. GitLab has no drafts, so the release is public right away.
- * Uses `token` if set, and the `glab` CLI otherwise. Rejects if neither is available or if
+ * Uses `token` with the REST API if set, so a CI job needs no `glab`, and the `glab` CLI otherwise. Rejects if neither is available or if
  * GitLab refuses the request.
  */
 export async function createGitlabRelease(
@@ -29,7 +50,7 @@ export async function createGitlabRelease(
   };
 
   if (token) {
-    const response = await fetch(`https://${repo.host}/api/v4/${apiPath}`, {
+    const response = await fetch(`${getGitlabApiUrl(repo)}/${apiPath}`, {
       method: "POST",
       headers: { "PRIVATE-TOKEN": token, "Content-Type": "application/json" },
       body: JSON.stringify(fields),

@@ -9,7 +9,7 @@ vi.mock("node:child_process", () => ({
 
 const fetchMock = vi.fn();
 
-const { createGitlabRelease } = await import("../src/gitlab-release.ts");
+const { createGitlabRelease, getGitlabApiUrl } = await import("../src/gitlab-release.ts");
 
 const repo = { host: "gitlab.com", path: "acme/web/shop" };
 const release = { version: "v1.3.0", changelog: "## Story\n\n- PROJ-1 Basket" };
@@ -44,6 +44,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe("createGitlabRelease", () => {
@@ -131,5 +132,45 @@ describe("createGitlabRelease", () => {
     await expect(createGitlabRelease(repo, undefined, release)).rejects.toThrow(
       "No GitLab token and no glab CLI found. Set CHANGELOG_GITLAB_API_TOKEN or install glab.",
     );
+  });
+});
+
+describe("getGitlabApiUrl", () => {
+  const ci = { CI_SERVER_URL: "https://gitlab.com", CI_API_V4_URL: "https://gitlab.com/api/v4" };
+
+  test("uses the remote host outside GitLab CI", () => {
+    expect(getGitlabApiUrl(repo, {})).toBe("https://gitlab.com/api/v4");
+  });
+
+  test("uses CI_API_V4_URL in a GitLab CI job on the same instance", () => {
+    const selfHosted = { host: "git.example.com", path: "acme/shop" };
+    expect(
+      getGitlabApiUrl(selfHosted, {
+        CI_SERVER_URL: "http://git.example.com",
+        CI_API_V4_URL: "http://git.example.com/gitlab/api/v4/",
+      }),
+    ).toBe("http://git.example.com/gitlab/api/v4");
+  });
+
+  test("ignores CI_API_V4_URL when origin is on another instance", () => {
+    expect(getGitlabApiUrl({ host: "git.example.com", path: "acme/shop" }, ci)).toBe(
+      "https://git.example.com/api/v4",
+    );
+  });
+});
+
+describe("createGitlabRelease in GitLab CI", () => {
+  test("creates the release through the API of the job's instance, without glab", async () => {
+    vi.stubEnv("CI", "true");
+    vi.stubEnv("CI_SERVER_URL", "https://gitlab.com");
+    vi.stubEnv("CI_API_V4_URL", "https://gitlab.com/api/v4");
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({}) });
+
+    expect(await createGitlabRelease(repo, "glpat-bot", release)).toBe(editUrl);
+
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      "https://gitlab.com/api/v4/projects/acme%2Fweb%2Fshop/releases",
+    );
+    expect(execFileMock).not.toHaveBeenCalled();
   });
 });

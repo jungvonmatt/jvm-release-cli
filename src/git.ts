@@ -13,9 +13,80 @@ import type { GitProvider } from "./changelog/types.ts";
 
 const execa = promisify(exec);
 
+/**
+ * Returns the name of the checked-out branch. Throws on a detached HEAD, which is what GitLab CI
+ * and most other CI services check out: the release needs a branch to commit to and push.
+ */
 export const getCurrentBranch = async (): Promise<string> => {
-  const { stdout } = await execa("git symbolic-ref --short HEAD");
-  return stdout.trim();
+  try {
+    const { stdout } = await execa("git symbolic-ref --short -q HEAD");
+    return stdout.trim();
+  } catch (error: unknown) {
+    // `symbolic-ref -q` fails silently on a detached HEAD, and with a message outside a repository
+    if ((error as { stderr?: string }).stderr?.trim()) {
+      throw error;
+    }
+    throw new Error(
+      "HEAD is detached, but the release needs a branch. Check out the release branch first, " +
+        "for example: git checkout -B main origin/main",
+    );
+  }
+};
+
+/**
+ * Ensures the clone has the full history. In a shallow clone, such as a GitLab CI checkout with
+ * the default `GIT_DEPTH`, tags are missing, so the CLI would compute the wrong version.
+ */
+export const verifyFullHistory = async (): Promise<void> => {
+  let shallow: string;
+  try {
+    ({ stdout: shallow } = await execa("git rev-parse --is-shallow-repository"));
+  } catch {
+    // Not a git repository. The later git commands report that.
+    return;
+  }
+  if (shallow.trim() === "true") {
+    throw new Error(
+      "Shallow clone: tags and history are missing, so the version would be wrong. " +
+        "Run `git fetch --unshallow --tags`, or set `GIT_DEPTH: 0` in the GitLab CI job.",
+    );
+  }
+};
+
+/**
+ * Ensures git knows who commits. The version bump and the merge of a production release create
+ * commits, and a CI runner has no git user by default.
+ */
+export const verifyGitIdentity = async (): Promise<void> => {
+  try {
+    await execa("git var GIT_COMMITTER_IDENT");
+  } catch {
+    throw new Error(
+      "No git user. Set one before the release, for example: " +
+        'git config user.name "Release Bot" && git config user.email "release-bot@example.com"',
+    );
+  }
+};
+
+/**
+ * Ensures `origin` does not use the GitLab CI job token. That token can fetch, but it cannot
+ * push, so the release would fail after it created the version commit and tag.
+ */
+export const verifyOriginCanPush = async (): Promise<void> => {
+  let url: string;
+  try {
+    ({ stdout: url } = await execa("git remote get-url origin"));
+  } catch {
+    // No origin. The push reports that.
+    return;
+  }
+  if (/\/\/gitlab-ci-token(:|@)/.test(url)) {
+    throw new Error(
+      "origin uses the CI job token, which cannot push. Set origin to a URL with a token that " +
+        "can push, for example: git remote set-url origin " +
+        '"https://release-bot:${RELEASE_BOT_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"',
+    );
+  }
 };
 
 const getDefaultBranch = async (): Promise<string> => {
