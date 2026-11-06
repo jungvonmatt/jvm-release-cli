@@ -9,7 +9,7 @@ vi.mock("node:child_process", () => ({
 
 const fetchMock = vi.fn();
 
-const { createGithubRelease, getGithubApiUrl } = await import("../src/github-release.ts");
+const { github } = await import("../src/provider/github.ts");
 
 const repo = { host: "github.com", path: "acme/shop" };
 const release = {
@@ -46,11 +46,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("createGithubRelease", () => {
+describe("github.createRelease", () => {
   test("creates a published release with the token and returns its page", async () => {
     fetchMock.mockResolvedValue(created());
 
-    expect(await createGithubRelease(repo, "ghp-config", release, {})).toBe(htmlUrl);
+    expect(await github.createRelease(repo, "ghp-config", release, {})).toBe(htmlUrl);
 
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("https://api.github.com/repos/acme/shop/releases");
@@ -68,7 +68,7 @@ describe("createGithubRelease", () => {
   test("marks a pre-release", async () => {
     fetchMock.mockResolvedValue(created());
 
-    await createGithubRelease(repo, "ghp-config", { ...release, isPrerelease: true }, {});
+    await github.createRelease(repo, "ghp-config", { ...release, isPrerelease: true }, {});
 
     expect(sentFields().prerelease).toBe(true);
   });
@@ -76,7 +76,7 @@ describe("createGithubRelease", () => {
   test("prefers the configured token over GITHUB_TOKEN", async () => {
     fetchMock.mockResolvedValue(created());
 
-    await createGithubRelease(repo, "ghp-config", release, { GITHUB_TOKEN: "ghs-actions" });
+    await github.createRelease(repo, "ghp-config", release, { GITHUB_TOKEN: "ghs-actions" });
 
     expect(sentAuth()).toBe("Bearer ghp-config");
   });
@@ -84,7 +84,7 @@ describe("createGithubRelease", () => {
   test("uses GITHUB_TOKEN without a configured token", async () => {
     fetchMock.mockResolvedValue(created());
 
-    await createGithubRelease(repo, undefined, release, { GITHUB_TOKEN: "ghs-actions" });
+    await github.createRelease(repo, undefined, release, { GITHUB_TOKEN: "ghs-actions" });
 
     expect(sentAuth()).toBe("Bearer ghs-actions");
     expect(execFileMock).not.toHaveBeenCalled();
@@ -93,7 +93,7 @@ describe("createGithubRelease", () => {
   test("uses gh without any token", async () => {
     mockGh(true);
 
-    expect(await createGithubRelease(repo, undefined, release, {})).toBe(htmlUrl);
+    expect(await github.createRelease(repo, undefined, release, {})).toBe(htmlUrl);
 
     const apiCall = execFileMock.mock.calls.find(([, args]) => args[0] === "api")!;
     expect(apiCall[0]).toBe("gh");
@@ -119,13 +119,13 @@ describe("createGithubRelease", () => {
   test("builds the release page when the response has no URL", async () => {
     mockGh(true, "{}");
 
-    expect(await createGithubRelease(repo, undefined, release, {})).toBe(htmlUrl);
+    expect(await github.createRelease(repo, undefined, release, {})).toBe(htmlUrl);
   });
 
   test("rejects without a token and without gh", async () => {
     mockGh(false);
 
-    await expect(createGithubRelease(repo, undefined, release, {})).rejects.toThrow(
+    await expect(github.createRelease(repo, undefined, release, {})).rejects.toThrow(
       "No GitHub token and no gh CLI found. Set CHANGELOG_GITHUB_API_TOKEN or GITHUB_TOKEN, or install gh.",
     );
   });
@@ -137,26 +137,26 @@ describe("createGithubRelease", () => {
       json: async () => ({ message: "Resource not accessible by integration" }),
     });
 
-    await expect(createGithubRelease(repo, "ghs-actions", release, {})).rejects.toThrow(
+    await expect(github.createRelease(repo, "ghs-actions", release, {})).rejects.toThrow(
       "GitHub API returned 403: Resource not accessible by integration",
     );
   });
 });
 
-describe("getGithubApiUrl", () => {
+describe("github.apiBaseUrl", () => {
   test("uses api.github.com for github.com", () => {
-    expect(getGithubApiUrl(repo, {})).toBe("https://api.github.com");
+    expect(github.apiBaseUrl(repo, {})).toBe("https://api.github.com");
   });
 
   test("uses /api/v3 on GitHub Enterprise Server", () => {
-    expect(getGithubApiUrl({ host: "git.example.com", path: "acme/shop" }, {})).toBe(
+    expect(github.apiBaseUrl({ host: "git.example.com", path: "acme/shop" }, {})).toBe(
       "https://git.example.com/api/v3",
     );
   });
 
   test("uses GITHUB_API_URL in a GitHub Actions job on the same instance", () => {
     expect(
-      getGithubApiUrl(
+      github.apiBaseUrl(
         { host: "git.example.com", path: "acme/shop" },
         {
           GITHUB_SERVER_URL: "https://git.example.com",

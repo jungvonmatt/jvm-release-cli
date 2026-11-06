@@ -26,7 +26,6 @@ import {
   verifyGitIdentity,
   verifyOriginCanPush,
   getRemoteRepository,
-  detectProvider,
   hasTag,
   deleteTemporaryBranch,
   pushRelease,
@@ -45,6 +44,7 @@ import { generateChangelog } from "./changelog/index.ts";
 import { loadChangelogConfig } from "./config.ts";
 import { init } from "./init/index.ts";
 import { createRelease } from "./create-release.ts";
+import { detectProvider, getProvider } from "./provider/index.ts";
 import { confirmOrFail, isCI, showReleasePage } from "./ci.ts";
 import type { ChangelogConfig } from "./changelog/types.ts";
 import type { ReleaseContext } from "./types.ts";
@@ -418,8 +418,9 @@ const main = defineCommand({
                 return;
               }
 
-              const provider =
-                changelogConfig?.gitProvider ?? detectProvider(repo.host) ?? "github";
+              const provider = getProvider(
+                changelogConfig?.gitProvider ?? detectProvider(repo.host) ?? "github",
+              );
               const created = await createRelease(
                 repo,
                 provider,

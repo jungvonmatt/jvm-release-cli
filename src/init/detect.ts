@@ -29,8 +29,8 @@ export const findExistingConfig = async (cwd: string): Promise<string | null> =>
   }
 };
 
-/** Checks whether `gh` or `glab` is installed and logged in for `host`. */
-export const isCliLoggedIn = async (command: "gh" | "glab", host: string): Promise<boolean> => {
+/** Checks whether a provider CLI such as `gh` or `glab` is installed and logged in for `host`. */
+export const isCliLoggedIn = async (command: string, host: string): Promise<boolean> => {
   try {
     await execFileAsync(command, ["auth", "status", "--hostname", host]);
     return true;
