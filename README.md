@@ -14,11 +14,11 @@ A general-purpose release preparation CLI for git-based projects. Automates vers
 - **Revert detection** — excludes reverted commits (odd revert depth = excluded, even = kept)
 - **Pull/merge request links** — adds GitHub PR or GitLab MR links and author handles to the changelog, via an API token or the `gh` / `glab` CLI
 - **Graceful degradation** — works without Jira credentials (falls back to raw commit list)
-- **Release pages** — after a successful release, opens a pre-filled GitHub release draft, or creates the GitLab release with the changelog and opens its edit page
+- **Release pages** — after a successful release, opens a pre-filled GitHub release draft, or creates the GitLab release with the changelog and opens its edit page. In CI, it creates the GitHub or GitLab release through the API
 - **Preview mode** — dry-run that prints all git commands without executing them
 - **Rollback support** — automatic cleanup of tags and version bump commits on failure
 - **Hotfix awareness** — warns and asks before it continues on a `hotfix/*` branch
-- **CI-ready** — runs unattended in GitLab CI, see [Running in GitLab CI](#running-in-gitlab-ci)
+- **CI-ready** — runs unattended in GitLab CI and GitHub Actions, see [Running in CI](#running-in-ci)
 
 ## Requirements
 
@@ -65,7 +65,7 @@ When you run `jvm-release`, it:
 4. **Runs tests** — executes the project's test suite (skipped with `--no-tests`)
 5. **Generates a changelog** — builds a Jira-enriched Markdown changelog for the tag range
 6. **Pushes to origin** — pushes the commit and the tag in one atomic push, so `origin` gets both or neither
-7. **Opens the release page** (in CI, prints its URL) — on GitHub, a release draft pre-filled with tag, title and changelog. GitLab cannot pre-fill its page, and it has no drafts. So the CLI creates the GitLab release with the changelog through the API, with `gitlabToken` or the `glab` login, and opens its edit page. The release is public right away. Without a token or `glab`, or if GitLab refuses the request, the CLI opens the empty page and prints the changelog for you to paste. `--preview` creates no release.
+7. **Opens the release page** (in CI, prints its URL) — on GitHub, a release draft pre-filled with tag, title and changelog. In CI nobody reviews a draft, so the CLI creates the published GitHub release through the API instead. If that fails, it prints the draft URL and the changelog. GitLab cannot pre-fill its page, and it has no drafts. So the CLI creates the GitLab release with the changelog through the API, with `gitlabToken` or the `glab` login, and opens its edit page. The release is public right away. Without a token or `glab`, or if GitLab refuses the request, the CLI opens the empty page and prints the changelog for you to paste. `--preview` creates no release.
 
 If the release fails, the CLI rolls back automatically. It aborts a merge in progress, resets the branches to their commits from before the release, and deletes the tag that the release created. Commits and tags that existed before the release stay.
 
@@ -152,24 +152,30 @@ All config values can be provided via environment variables. This is the recomme
 | `CHANGELOG_JIRA_API_HOST`    | `jiraApiHost`  | Jira API host (defaults to `jiraBaseUrl`)                    |
 | `CHANGELOG_JIRA_API_EMAIL`   | `jiraApiEmail` | Jira API email for Basic Auth                                |
 | `CHANGELOG_JIRA_API_TOKEN`   | `jiraApiToken` | Jira API token for Basic Auth                                |
-| `CHANGELOG_GITHUB_API_TOKEN` | `githubToken`  | GitHub token for pull request links (optional)               |
+| `CHANGELOG_GITHUB_API_TOKEN` | `githubToken`  | GitHub token for pull request links and releases (optional)  |
 | `CHANGELOG_GITLAB_API_TOKEN` | `gitlabToken`  | GitLab token for merge request links and releases (optional) |
+
+To create a GitHub release in CI, the CLI uses `CHANGELOG_GITHUB_API_TOKEN`, then `GITHUB_TOKEN`, then the `gh` login.
 
 **Behavior by environment:**
 
 - **Local (non-CI):** missing values do not stop the release. The changelog falls back to raw commit summaries, and the CLI suggests `jvm-release init`.
 - **CI (`CI=true`):** missing `jiraBaseUrl` throws a hard error with an actionable message listing all missing fields.
 
-## Running in GitLab CI
+## Running in CI
 
-The CLI runs unattended when `CI` is set. GitLab CI sets it in every job. In CI, the CLI:
+The CLI runs unattended when `CI` is set. GitLab CI and GitHub Actions set it in every job. In CI, the CLI:
 
 - Never asks a question. If it would ask, it stops with an error: without a target argument, without new commits, on a `hotfix/*` branch, and for `jvm-release init`.
 - Prints the release page URL to the job log instead of opening a browser.
 - Prints one log line per step instead of animated spinners.
 - Creates the GitLab release through the REST API with `CHANGELOG_GITLAB_API_TOKEN`, so the job needs no `glab`. In a GitLab CI job, it uses the API URL of the job's instance (`CI_API_V4_URL`).
+- Creates the GitHub release through the REST API, published, not as a draft. It uses `CHANGELOG_GITHUB_API_TOKEN`, then `GITHUB_TOKEN`, then the `gh` login. Pre-releases are marked as pre-releases.
+- If the API call fails, warns and prints the release page URL and the release notes. The tag is pushed at that point, so do not run the job again. Create the release by hand instead.
 
-### What the CLI checks, and what the job does
+### GitLab CI
+
+#### What the CLI checks, and what the job does
 
 A GitLab CI checkout is not ready for a release. The CLI checks each problem before it changes anything, and stops with the command that fixes it. The job script must do the fix.
 
@@ -181,7 +187,7 @@ A GitLab CI checkout is not ready for a release. The CLI checks each problem bef
 | `origin` uses `CI_JOB_TOKEN`, which cannot push                      | "Check push access"            | `git remote set-url origin` with a token that has `write_repository` |
 | Tags from other branches are missing                                 | none                           | `git fetch --tags --force origin <branch>`                           |
 
-### Token
+#### Token
 
 Create a project access token, for example "Release Bot", with these scopes:
 
@@ -190,7 +196,7 @@ Create a project access token, for example "Release Bot", with these scopes:
 
 If the release branch is protected, add the token's bot user to "Allowed to push and merge" for that branch. If version tags are protected, also allow the bot user to create them. Store the token as a masked CI/CD variable, for example `RELEASE_BOT_TOKEN`.
 
-### Example job
+#### Example job
 
 This example releases from the `main` branch with two manual jobs. Each job pushes the version commit to `main` and the tag in one atomic push. The tag then starts the deploy pipeline.
 
@@ -233,7 +239,60 @@ Notes:
 
 - The job releases the current tip of `origin/main`, not the commit of the pipeline that runs the job. A production release promotes the newest pre-release.
 - The version commit starts a new `main` pipeline. The release jobs are manual, so this does not start a new release.
-- If the GitLab release cannot be created, the job log shows the reason and the release notes. The tag is pushed at that point, so do not run the job again. Create the release by hand instead.
+
+### GitHub Actions
+
+`actions/checkout` checks out a branch, but a shallow one, and without a git user. Set `fetch-depth: 0` and the git user. The CLI checks both.
+
+The workflow's `GITHUB_TOKEN` can push the version commit and the tag, and create the release, with `permissions: contents: write`. Pass it to the CLI as an environment variable. It has two limits:
+
+- It cannot push to a protected branch that requires pull requests. Use a GitHub App token or a fine-grained personal access token instead. Pass it to `actions/checkout` as `token`, and to the CLI as `CHANGELOG_GITHUB_API_TOKEN`.
+- A tag pushed with `GITHUB_TOKEN` does not start other workflows. If a tag must start a deploy workflow, use one of those tokens too.
+
+#### Example workflow
+
+```yaml
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Release target
+        type: choice
+        options: [prerelease, production]
+
+permissions:
+  contents: write # push the version commit and the tag, create the release
+
+# One release at a time
+concurrency: release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0 # full history, so the CLI sees all tags
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - run: pnpm exec jvm-release "$TARGET" --branch main --no-tests
+        env:
+          TARGET: ${{ inputs.target }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANGELOG_JIRA_BASEURL: ${{ vars.CHANGELOG_JIRA_BASEURL }}
+          CHANGELOG_JIRA_API_EMAIL: ${{ secrets.CHANGELOG_JIRA_API_EMAIL }}
+          CHANGELOG_JIRA_API_TOKEN: ${{ secrets.CHANGELOG_JIRA_API_TOKEN }}
+```
 
 ## How the changelog works
 

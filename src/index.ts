@@ -8,7 +8,8 @@
 // before it continues on a `hotfix/*` branch.
 //
 // In CI (`CI` is set) nothing prompts: a question that needs an answer stops the release with an
-// error, and the release page URL goes to the log instead of a browser.
+// error, the release page URL goes to the log instead of a browser, and a GitHub release is
+// created through the API instead of opened as a draft.
 
 import { exec } from "node:child_process";
 import { resolve } from "node:path";
@@ -43,8 +44,7 @@ import { verifyVersionIsNewer } from "./version.ts";
 import { generateChangelog } from "./changelog/index.ts";
 import { loadChangelogConfig } from "./config.ts";
 import { init } from "./init/index.ts";
-import { getReleasePage } from "./release-page.ts";
-import { createGitlabRelease } from "./gitlab-release.ts";
+import { createRelease } from "./create-release.ts";
 import { confirmOrFail, isCI, showReleasePage } from "./ci.ts";
 import type { ChangelogConfig } from "./changelog/types.ts";
 import type { ReleaseContext } from "./types.ts";
@@ -420,32 +420,20 @@ const main = defineCommand({
 
               const provider =
                 changelogConfig?.gitProvider ?? detectProvider(repo.host) ?? "github";
-              const page = getReleasePage(repo, provider, {
-                version: ctx.version,
-                changelog: ctx.changelog,
-                isPrerelease: Boolean(ctx.isPrerelease),
-                target: branch,
-              });
-              ctx.notesInReleasePage = page.includesNotes;
-              let url = page.url;
-
-              // GitLab's page cannot be prefilled with notes, so create the release through the
-              // API and open its edit page. If that fails, open the empty page and print the notes.
-              if (provider === "gitlab" && !preview) {
-                try {
-                  url = await createGitlabRelease(repo, changelogConfig?.gitlabToken, {
-                    version: ctx.version,
-                    changelog: ctx.changelog,
-                  });
-                  ctx.notesInReleasePage = true;
-                } catch (error: unknown) {
-                  console.warn(
-                    pc.yellow(`✗ Could not create the GitLab release: ${(error as Error).message}`),
-                  );
-                }
-              }
-
-              await showReleasePage(url);
+              const created = await createRelease(
+                repo,
+                provider,
+                changelogConfig,
+                {
+                  version: ctx.version,
+                  changelog: ctx.changelog,
+                  isPrerelease: Boolean(ctx.isPrerelease),
+                  target: branch,
+                },
+                preview,
+              );
+              ctx.notesInReleasePage = created.notesInReleasePage;
+              await showReleasePage(created.url);
             },
           },
         ],

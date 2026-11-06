@@ -1,12 +1,10 @@
-import { cliJson, isCommandAvailable } from "../cli-api.ts";
+import { cliJson, GITHUB_API_VERSION, isCommandAvailable } from "../cli-api.ts";
 import { detectProvider, getRemoteRepository } from "../git.ts";
 import type { RemoteRepository } from "../git.ts";
 import type { ChangelogConfig, CommitLog, GitProvider, GraphNode, PullRequest } from "./types.ts";
 
 /** Maximum number of parallel API requests (or `gh`/`glab` processes). */
 const CONCURRENCY = 6;
-
-const GITHUB_API_VERSION = "2022-11-28";
 
 /** Source branches of back-merge PRs, e.g. `production` merged back into `main`. */
 export const DEFAULT_BACK_MERGE_BRANCHES = ["main", "master", "production", "release"];

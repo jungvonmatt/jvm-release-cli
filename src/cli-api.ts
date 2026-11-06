@@ -1,9 +1,13 @@
-// Calls the GitHub or GitLab API through the `gh` or `glab` CLI, which reuse the CLI's login.
+// Calls the GitHub or GitLab API with a token, or through the `gh` or `glab` CLI, which reuse
+// the CLI's login.
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+
+/** GitHub REST API version, see https://docs.github.com/rest/about-the-rest-api/api-versions */
+export const GITHUB_API_VERSION = "2022-11-28";
 
 export const isCommandAvailable = async (command: string): Promise<boolean> => {
   try {
@@ -47,4 +51,28 @@ export const cliJson = async (
         : message,
     );
   }
+};
+
+/**
+ * Sends `body` as JSON with a POST request and parses the JSON response. Rejects with
+ * "<provider> API returned <status>: <reason>". GitHub and GitLab both give the reason in `message`,
+ * for example "Release already exists".
+ */
+export const postJson = async (
+  provider: string,
+  url: string,
+  headers: Record<string, string>,
+  body: unknown,
+): Promise<unknown> => {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = (await response.json().catch(() => null)) as { message?: unknown } | null;
+  if (!response.ok) {
+    const reason = typeof json?.message === "string" ? `: ${json.message}` : "";
+    throw new Error(`${provider} API returned ${response.status}${reason}`);
+  }
+  return json;
 };
