@@ -257,7 +257,7 @@ describe("a CI checkout", () => {
   beforeEach(() => {
     git("symbolic-ref", "HEAD", "refs/heads/main");
     git("commit", "-q", "--allow-empty", "-m", "init");
-    git("commit", "-q", "--allow-empty", "-m", "LEV-1 add basket");
+    git("commit", "-q", "--allow-empty", "-m", "PROJ-1 add basket");
   });
 
   test("names the checkout command on a detached HEAD", async () => {

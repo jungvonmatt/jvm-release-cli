@@ -20,7 +20,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   git.getLatestTag.mockResolvedValue("v1.2.0");
   git.getLatestReleaseTag.mockResolvedValue("v1.2.0");
-  git.commitLogFromRevision.mockResolvedValue("LEV-1 Add basket abc1234");
+  git.commitLogFromRevision.mockResolvedValue("PROJ-1 Add basket abc1234");
   vi.stubEnv("CI", "true");
 });
 

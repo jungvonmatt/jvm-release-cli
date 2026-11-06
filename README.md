@@ -192,7 +192,7 @@ If the release branch is protected, add the token's bot user to "Allowed to push
 
 ### Example job
 
-This example releases from the `integration` branch with two manual jobs. Each job pushes the version commit to `integration` and the tag in one atomic push. The tag then starts the deploy pipeline.
+This example releases from the `main` branch with two manual jobs. Each job pushes the version commit to `main` and the tag in one atomic push. The tag then starts the deploy pipeline.
 
 ```yaml
 .release:
@@ -207,7 +207,7 @@ This example releases from the `integration` branch with two manual jobs. Each j
     # Set CHANGELOG_JIRA_BASEURL, CHANGELOG_JIRA_API_EMAIL and
     # CHANGELOG_JIRA_API_TOKEN as CI/CD variables, or commit .release-clirc.json
   rules:
-    - if: $CI_COMMIT_BRANCH == "integration"
+    - if: $CI_COMMIT_BRANCH == "main"
       when: manual
   before_script:
     - corepack enable
@@ -215,24 +215,24 @@ This example releases from the `integration` branch with two manual jobs. Each j
     - git config user.name "Release Bot"
     - git config user.email "release-bot@noreply.${CI_SERVER_HOST}"
     - git remote set-url origin "https://release-bot:${RELEASE_BOT_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-    - git fetch --tags --force origin integration
-    - git checkout -B integration origin/integration
+    - git fetch --tags --force origin main
+    - git checkout -B main origin/main
 
 release:prerelease:
   extends: .release
   script:
-    - pnpm exec jvm-release prerelease --branch integration --no-tests
+    - pnpm exec jvm-release prerelease --branch main --no-tests
 
 release:production:
   extends: .release
   script:
-    - pnpm exec jvm-release production --branch integration --no-tests
+    - pnpm exec jvm-release production --branch main --no-tests
 ```
 
 Notes:
 
-- The job releases the current tip of `origin/integration`, not the commit of the pipeline that runs the job. A production release promotes the newest pre-release.
-- The version commit starts a new `integration` pipeline. The release jobs are manual, so this does not start a new release.
+- The job releases the current tip of `origin/main`, not the commit of the pipeline that runs the job. A production release promotes the newest pre-release.
+- The version commit starts a new `main` pipeline. The release jobs are manual, so this does not start a new release.
 - If the GitLab release cannot be created, the job log shows the reason and the release notes. The tag is pushed at that point, so do not run the job again. Create the release by hand instead.
 
 ## How the changelog works

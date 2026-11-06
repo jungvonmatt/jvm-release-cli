@@ -71,7 +71,7 @@ test("fetchJiraTickets names jvm-release init when credentials are missing", asy
 test("fetchJiraTickets names the CI variables when credentials are missing in CI", async () => {
   vi.stubEnv("CI", "true");
   try {
-    await fetchJiraTickets(["LEV-1"], { jiraBaseUrl: config.jiraBaseUrl });
+    await fetchJiraTickets(["PROJ-1"], { jiraBaseUrl: config.jiraBaseUrl });
   } finally {
     vi.unstubAllEnvs();
   }
