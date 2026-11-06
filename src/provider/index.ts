@@ -3,7 +3,7 @@ import { github } from "./github.ts";
 import { gitlab } from "./gitlab.ts";
 import type { Provider } from "./types.ts";
 
-export type { Provider, ReleaseDetails, ReleasePage } from "./types.ts";
+export type { Provider, ReleaseDetails } from "./types.ts";
 export { github, gitlab };
 
 export const providers: Record<GitProvider, Provider> = { github, gitlab };

@@ -8,7 +8,7 @@ import type { Provider } from "./types.ts";
 
 const execFileAsync = promisify(execFile);
 
-export const isCommandAvailable = async (command: string): Promise<boolean> => {
+const isCommandAvailable = async (command: string): Promise<boolean> => {
   try {
     await execFileAsync(command, ["--version"]);
     return true;
@@ -24,7 +24,7 @@ const CLI_AUTH_ERROR = /\b401\b|unauthorized|bad credentials|invalid_grant/i;
  * Runs `gh api` or `glab api` for `path` and parses the JSON response.
  * `args` adds flags, for example `--method POST` and `-f key=value` fields.
  */
-export const cliJson = async (
+const cliJson = async (
   command: string,
   path: string,
   host: string,

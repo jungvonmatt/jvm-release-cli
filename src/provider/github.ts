@@ -3,7 +3,7 @@ import { createApiClient } from "./api.ts";
 import type { Provider } from "./types.ts";
 
 /** GitHub REST API version, see https://docs.github.com/rest/about-the-rest-api/api-versions */
-export const GITHUB_API_VERSION = "2022-11-28";
+const GITHUB_API_VERSION = "2022-11-28";
 
 interface GithubPullRequest {
   number: number;
