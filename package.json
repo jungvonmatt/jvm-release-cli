@@ -1,6 +1,6 @@
 {
   "name": "@jungvonmatt/release",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A general-purpose release preparation CLI for git-based projects.",
   "homepage": "https://github.com/jungvonmatt/jvm-release-cli#readme",
   "bugs": {
