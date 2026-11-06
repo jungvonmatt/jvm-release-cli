@@ -369,6 +369,17 @@ describe("attachPullRequests", () => {
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("(#1, #2, #3)"));
   });
 
+  test("lists failed GitLab lookups as merge request references", async () => {
+    const get = vi.fn(async () => {
+      throw new Error("401 Unauthorized");
+    });
+    const nodes = [makeNode("One (!1)"), makeNode("Two (!2)")];
+
+    await attachPullRequests(nodes, { provider: "gitlab", get });
+
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("(!1, !2)"));
+  });
+
   test("ignores back-merge PRs from the default long-lived branches", async () => {
     const get = vi.fn(async (n: number) => pr(n, "Back-merge production", "production"));
     const nodes = [makeNode("Merge pull request #880 from acme/production")];

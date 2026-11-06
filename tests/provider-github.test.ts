@@ -55,7 +55,12 @@ describe("github.createRelease", () => {
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("https://api.github.com/repos/acme/shop/releases");
     expect(init.method).toBe("POST");
-    expect(sentAuth()).toBe("Bearer ghp-config");
+    expect(init.headers).toEqual(
+      expect.objectContaining({
+        Authorization: "Bearer ghp-config",
+        "X-GitHub-Api-Version": "2022-11-28",
+      }),
+    );
     expect(sentFields()).toEqual({
       tag_name: "v1.3.0",
       name: "v1.3.0",
@@ -159,9 +164,18 @@ describe("github.apiBaseUrl", () => {
       github.apiBaseUrl(
         { host: "git.example.com", path: "acme/shop" },
         {
-          GITHUB_SERVER_URL: "https://git.example.com",
-          GITHUB_API_URL: "https://git.example.com/api/v3/",
+          GITHUB_SERVER_URL: "http://git.example.com",
+          GITHUB_API_URL: "http://git.example.com/github/api/v3/",
         },
+      ),
+    ).toBe("http://git.example.com/github/api/v3");
+  });
+
+  test("ignores GITHUB_API_URL when origin is on another instance", () => {
+    expect(
+      github.apiBaseUrl(
+        { host: "git.example.com", path: "acme/shop" },
+        { GITHUB_SERVER_URL: "https://github.com", GITHUB_API_URL: "https://api.github.com" },
       ),
     ).toBe("https://git.example.com/api/v3");
   });
