@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
-import { getReleasePage } from "../src/release-page.ts";
+import { detectProvider, github, gitlab } from "../src/provider/index.ts";
 
 const release = {
   version: "v1.3.0-pre.0",
@@ -8,9 +8,9 @@ const release = {
   target: "main",
 };
 
-describe("getReleasePage", () => {
+describe("releasePage", () => {
   test("GitHub draft is prefilled with tag, title, notes and prerelease flag", () => {
-    const page = getReleasePage({ host: "github.com", path: "acme/shop" }, "github", release);
+    const page = github.releasePage({ host: "github.com", path: "acme/shop" }, release);
     const url = new URL(page.url);
 
     expect(url.origin + url.pathname).toBe("https://github.com/acme/shop/releases/new");
@@ -25,29 +25,41 @@ describe("getReleasePage", () => {
   });
 
   test("GitHub stable release sets prerelease to 0", () => {
-    const page = getReleasePage({ host: "github.com", path: "acme/shop" }, "github", {
-      ...release,
-      version: "v1.3.0",
-      isPrerelease: false,
-    });
+    const page = github.releasePage(
+      { host: "github.com", path: "acme/shop" },
+      {
+        ...release,
+        version: "v1.3.0",
+        isPrerelease: false,
+      },
+    );
 
     expect(new URL(page.url).searchParams.get("prerelease")).toBe("0");
   });
 
   test("GitLab page is prefilled with the tag only", () => {
-    const page = getReleasePage({ host: "gitlab.com", path: "acme/web/shop" }, "gitlab", release);
+    const page = gitlab.releasePage({ host: "gitlab.com", path: "acme/web/shop" }, release);
 
     expect(page.url).toBe("https://gitlab.com/acme/web/shop/-/releases/new?tag_name=v1.3.0-pre.0");
     expect(page.includesNotes).toBe(false);
   });
 
   test("keeps the port of a self-hosted instance", () => {
-    const page = getReleasePage(
-      { host: "gitlab.acme.com:8443", path: "acme/shop" },
-      "gitlab",
-      release,
-    );
+    const page = gitlab.releasePage({ host: "gitlab.acme.com:8443", path: "acme/shop" }, release);
 
     expect(page.url).toMatch(/^https:\/\/gitlab\.acme\.com:8443\/acme\/shop\/-\/releases\/new/);
+  });
+});
+
+describe("detectProvider", () => {
+  test("detects GitHub and GitLab hosts", () => {
+    expect(detectProvider("github.com")).toBe("github");
+    expect(detectProvider("github.acme.com")).toBe("github");
+    expect(detectProvider("gitlab.com")).toBe("gitlab");
+    expect(detectProvider("gitlab.acme.com:8443")).toBe("gitlab");
+  });
+
+  test("returns null for unknown hosts", () => {
+    expect(detectProvider("git.acme.com")).toBeNull();
   });
 });

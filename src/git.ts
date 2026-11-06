@@ -9,7 +9,6 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 import semver from "semver";
-import type { GitProvider } from "./changelog/types.ts";
 
 const execa = promisify(exec);
 
@@ -410,13 +409,6 @@ export const getRemoteRepository = async (): Promise<RemoteRepository | null> =>
   } catch {
     return null;
   }
-};
-
-/** Detects the provider from the remote host. Self-hosted instances may need `gitProvider` in the config. */
-export const detectProvider = (host: string): GitProvider | null => {
-  if (host.includes("github")) return "github";
-  if (host.includes("gitlab")) return "gitlab";
-  return null;
 };
 
 export const getPackageVersion = async (root: string): Promise<string> => {

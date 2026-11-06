@@ -1,6 +1,7 @@
-import { cliJson, GITHUB_API_VERSION, isCommandAvailable } from "../cli-api.ts";
-import { detectProvider, getRemoteRepository } from "../git.ts";
+import { getRemoteRepository } from "../git.ts";
 import type { RemoteRepository } from "../git.ts";
+import { createApiClient } from "../provider/api.ts";
+import { detectProvider, getProvider } from "../provider/index.ts";
 import type { ChangelogConfig, CommitLog, GitProvider, GraphNode, PullRequest } from "./types.ts";
 
 /** Maximum number of parallel API requests (or `gh`/`glab` processes). */
@@ -14,64 +15,11 @@ export interface PullRequestClient {
   get: (number: number) => Promise<PullRequest>;
 }
 
-interface GithubPullRequest {
-  number: number;
-  title: string;
-  html_url: string;
-  user: { login: string } | null;
-  head: { ref: string };
-}
-
-interface GitlabMergeRequest {
-  iid: number;
-  title: string;
-  web_url: string;
-  author: { username: string } | null;
-  source_branch: string;
-}
-
-const fromGithub = (data: GithubPullRequest): PullRequest => ({
-  number: data.number,
-  reference: `#${data.number}`,
-  title: data.title,
-  sourceBranch: data.head.ref,
-  author: data.user?.login ?? null,
-  url: data.html_url,
-});
-
-const fromGitlab = (data: GitlabMergeRequest): PullRequest => ({
-  number: data.iid,
-  reference: `!${data.iid}`,
-  title: data.title,
-  sourceBranch: data.source_branch,
-  author: data.author?.username ?? null,
-  url: data.web_url,
-});
-
 /**
- * Finds the pull/merge request number in a mainline commit message.
- *
- * - GitHub: `Merge pull request #12 from …` (merge commit) or `… (#12)` (squash merge)
- * - GitLab: `See merge request group/project!12` in the body (merge commit) or `… (!12)`
+ * Finds the pull/merge request number in a mainline commit message, in the format of `provider`.
  */
-export function findPullRequestNumber(commit: CommitLog, provider: GitProvider): number | null {
-  const match =
-    provider === "github"
-      ? (commit.subject.match(/^Merge pull request #(\d+) from /) ??
-        commit.subject.match(/\(#(\d+)\)$/))
-      : (commit.body.match(/^See merge request \S*!(\d+)\s*$/m) ??
-        commit.subject.match(/\(!(\d+)\)$/));
-
-  return match ? Number(match[1]) : null;
-}
-
-const fetchJson = async (url: string, headers: Record<string, string>): Promise<unknown> => {
-  const response = await fetch(url, { headers });
-  if (!response.ok) {
-    throw new Error(`API returned ${response.status} for ${url}`);
-  }
-  return response.json();
-};
+export const findPullRequestNumber = (commit: CommitLog, provider: GitProvider): number | null =>
+  getProvider(provider).findPullRequestNumber(commit);
 
 /**
  * Creates a client for the pull requests (GitHub) or merge requests (GitLab) of the `origin` repository.
@@ -83,66 +31,25 @@ export async function createPullRequestClient(
   config: ChangelogConfig,
   repo: RemoteRepository | null = null,
 ): Promise<PullRequestClient | null> {
-  repo ??= await getRemoteRepository();
-  if (!repo) return null;
+  const remote = repo ?? (await getRemoteRepository());
+  if (!remote) return null;
 
-  const provider = config.gitProvider ?? detectProvider(repo.host);
-  if (!provider) return null;
+  const id = config.gitProvider ?? detectProvider(remote.host);
+  if (!id) return null;
 
-  const { host, path } = repo;
-
-  if (provider === "github") {
-    const apiPath = (n: number) => `repos/${path}/pulls/${n}`;
-    const apiBase = host === "github.com" ? "https://api.github.com" : `https://${host}/api/v3`;
-    const token = config.githubToken;
-
-    if (token) {
-      const headers = {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": GITHUB_API_VERSION,
-      };
-      return {
-        provider,
-        get: async (n) =>
-          fromGithub((await fetchJson(`${apiBase}/${apiPath(n)}`, headers)) as GithubPullRequest),
-      };
-    }
-
-    if (await isCommandAvailable("gh")) {
-      return {
-        provider,
-        get: async (n) => fromGithub((await cliJson("gh", apiPath(n), host)) as GithubPullRequest),
-      };
-    }
-
-    console.warn("⚠️  No GitHub token and no gh CLI found. Skipping pull request links.");
+  const provider = getProvider(id);
+  const api = await createApiClient(provider, remote, config[provider.tokenKey]);
+  if (!api) {
+    console.warn(
+      `⚠️  No ${provider.name} token and no ${provider.cli} CLI found. Skipping ${provider.pullRequestName} links.`,
+    );
     return null;
   }
 
-  const apiPath = (n: number) => `projects/${encodeURIComponent(path)}/merge_requests/${n}`;
-  const token = config.gitlabToken;
-
-  if (token) {
-    const headers = { "PRIVATE-TOKEN": token };
-    return {
-      provider,
-      get: async (n) =>
-        fromGitlab(
-          (await fetchJson(`https://${host}/api/v4/${apiPath(n)}`, headers)) as GitlabMergeRequest,
-        ),
-    };
-  }
-
-  if (await isCommandAvailable("glab")) {
-    return {
-      provider,
-      get: async (n) => fromGitlab((await cliJson("glab", apiPath(n), host)) as GitlabMergeRequest),
-    };
-  }
-
-  console.warn("⚠️  No GitLab token and no glab CLI found. Skipping merge request links.");
-  return null;
+  return {
+    provider: id,
+    get: async (n) => provider.toPullRequest(await api.get(provider.pullRequestPath(remote, n))),
+  };
 }
 
 async function mapWithLimit<T, R>(
@@ -196,7 +103,7 @@ export async function attachPullRequests(
   });
 
   if (failed.length > 0) {
-    const prefix = client.provider === "github" ? "#" : "!";
+    const prefix = getProvider(client.provider).referencePrefix;
     const refs = failed
       .map((f) => f.number)
       .sort((a, b) => a - b)

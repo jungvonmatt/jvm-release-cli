@@ -269,21 +269,6 @@ describe("abortMerge", () => {
   });
 });
 
-describe("detectProvider", () => {
-  test("detects GitHub and GitLab hosts", async () => {
-    const { detectProvider } = await import("../src/git.ts");
-    expect(detectProvider("github.com")).toBe("github");
-    expect(detectProvider("github.acme.com")).toBe("github");
-    expect(detectProvider("gitlab.com")).toBe("gitlab");
-    expect(detectProvider("gitlab.acme.com:8443")).toBe("gitlab");
-  });
-
-  test("returns null for unknown hosts", async () => {
-    const { detectProvider } = await import("../src/git.ts");
-    expect(detectProvider("git.acme.com")).toBeNull();
-  });
-});
-
 describe("getPackageVersion", () => {
   test("reads version from package.json", async () => {
     readFileMock.mockResolvedValue(JSON.stringify({ version: "1.2.3" }));

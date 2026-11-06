@@ -9,10 +9,14 @@ vi.mock("node:child_process", () => ({
 
 const fetchMock = vi.fn();
 
-const { createGitlabRelease, getGitlabApiUrl } = await import("../src/gitlab-release.ts");
+const { gitlab } = await import("../src/provider/gitlab.ts");
 
 const repo = { host: "gitlab.com", path: "acme/web/shop" };
-const release = { version: "v1.3.0", changelog: "## Story\n\n- PROJ-1 Basket" };
+const release = {
+  version: "v1.3.0",
+  changelog: "## Story\n\n- PROJ-1 Basket",
+  isPrerelease: false,
+};
 const editUrl = "https://gitlab.com/acme/web/shop/-/releases/v1.3.0/edit";
 
 /** Makes `execFile` succeed for `glab --version` if glab is available, and answer `api` calls. */
@@ -47,11 +51,11 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe("createGitlabRelease", () => {
+describe("gitlab.createRelease", () => {
   test("creates the release with the token and returns its edit page", async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ tag_name: "v1.3.0" }) });
 
-    expect(await createGitlabRelease(repo, "glpat-x", release)).toBe(editUrl);
+    expect(await gitlab.createRelease(repo, "glpat-x", release)).toBe(editUrl);
 
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("https://gitlab.com/api/v4/projects/acme%2Fweb%2Fshop/releases");
@@ -75,7 +79,7 @@ describe("createGitlabRelease", () => {
       json: async () => ({ message: "Release already exists" }),
     });
 
-    await expect(createGitlabRelease(repo, "glpat-x", release)).rejects.toThrow(
+    await expect(gitlab.createRelease(repo, "glpat-x", release)).rejects.toThrow(
       "GitLab API returned 409: Release already exists",
     );
   });
@@ -89,7 +93,7 @@ describe("createGitlabRelease", () => {
       },
     });
 
-    await expect(createGitlabRelease(repo, "glpat-x", release)).rejects.toThrow(
+    await expect(gitlab.createRelease(repo, "glpat-x", release)).rejects.toThrow(
       /^GitLab API returned 502$/,
     );
   });
@@ -97,7 +101,7 @@ describe("createGitlabRelease", () => {
   test("uses glab without a token", async () => {
     mockGlab(true);
 
-    expect(await createGitlabRelease(repo, undefined, release)).toBe(editUrl);
+    expect(await gitlab.createRelease(repo, undefined, release)).toBe(editUrl);
 
     const apiCall = execFileMock.mock.calls.find(([, args]) => args[0] === "api")!;
     expect(apiCall[0]).toBe("glab");
@@ -121,7 +125,7 @@ describe("createGitlabRelease", () => {
   test("passes on the login hint when the glab login has expired", async () => {
     mockGlab(true, { stderr: "  ERROR  \n\n  401 Unauthorized  \n" });
 
-    await expect(createGitlabRelease(repo, undefined, release)).rejects.toThrow(
+    await expect(gitlab.createRelease(repo, undefined, release)).rejects.toThrow(
       "401 Unauthorized Run `glab auth login --hostname gitlab.com` and try again.",
     );
   });
@@ -129,23 +133,23 @@ describe("createGitlabRelease", () => {
   test("rejects without a token and without glab", async () => {
     mockGlab(false);
 
-    await expect(createGitlabRelease(repo, undefined, release)).rejects.toThrow(
+    await expect(gitlab.createRelease(repo, undefined, release)).rejects.toThrow(
       "No GitLab token and no glab CLI found. Set CHANGELOG_GITLAB_API_TOKEN or install glab.",
     );
   });
 });
 
-describe("getGitlabApiUrl", () => {
+describe("gitlab.apiBaseUrl", () => {
   const ci = { CI_SERVER_URL: "https://gitlab.com", CI_API_V4_URL: "https://gitlab.com/api/v4" };
 
   test("uses the remote host outside GitLab CI", () => {
-    expect(getGitlabApiUrl(repo, {})).toBe("https://gitlab.com/api/v4");
+    expect(gitlab.apiBaseUrl(repo, {})).toBe("https://gitlab.com/api/v4");
   });
 
   test("uses CI_API_V4_URL in a GitLab CI job on the same instance", () => {
     const selfHosted = { host: "git.example.com", path: "acme/shop" };
     expect(
-      getGitlabApiUrl(selfHosted, {
+      gitlab.apiBaseUrl(selfHosted, {
         CI_SERVER_URL: "http://git.example.com",
         CI_API_V4_URL: "http://git.example.com/gitlab/api/v4/",
       }),
@@ -153,20 +157,20 @@ describe("getGitlabApiUrl", () => {
   });
 
   test("ignores CI_API_V4_URL when origin is on another instance", () => {
-    expect(getGitlabApiUrl({ host: "git.example.com", path: "acme/shop" }, ci)).toBe(
+    expect(gitlab.apiBaseUrl({ host: "git.example.com", path: "acme/shop" }, ci)).toBe(
       "https://git.example.com/api/v4",
     );
   });
 });
 
-describe("createGitlabRelease in GitLab CI", () => {
+describe("gitlab.createRelease in GitLab CI", () => {
   test("creates the release through the API of the job's instance, without glab", async () => {
     vi.stubEnv("CI", "true");
     vi.stubEnv("CI_SERVER_URL", "https://gitlab.com");
     vi.stubEnv("CI_API_V4_URL", "https://gitlab.com/api/v4");
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({}) });
 
-    expect(await createGitlabRelease(repo, "glpat-bot", release)).toBe(editUrl);
+    expect(await gitlab.createRelease(repo, "glpat-bot", release)).toBe(editUrl);
 
     expect(fetchMock.mock.calls[0]![0]).toBe(
       "https://gitlab.com/api/v4/projects/acme%2Fweb%2Fshop/releases",

@@ -9,7 +9,6 @@ import { defineCommand } from "citty";
 import pc from "picocolors";
 import { confirm, input, password, select } from "@inquirer/prompts";
 import {
-  detectProvider,
   getRecentCommitMessages,
   getRemoteRepository,
   isGitIgnored,
@@ -18,6 +17,7 @@ import {
 import { DEFAULT_TICKET_PATTERN, ENV_VARS, loadChangelogConfig, withProtocol } from "../config.ts";
 import { verifyJiraCredentials } from "../changelog/jira.ts";
 import type { GitProvider } from "../changelog/types.ts";
+import { detectProvider, getProvider, providers } from "../provider/index.ts";
 import { isPromptCancel } from "../ui.ts";
 import { isCI } from "../ci.ts";
 import { findExistingConfig, inferTicketPattern, isCliLoggedIn } from "./detect.ts";
@@ -77,10 +77,7 @@ export async function runInit(cwd: string): Promise<void> {
     repo && !detected
       ? await select<GitProvider>({
           message: `Is ${repo.host} a GitHub or GitLab host?`,
-          choices: [
-            { name: "GitHub", value: "github" },
-            { name: "GitLab", value: "gitlab" },
-          ],
+          choices: Object.values(providers).map(({ name, id }) => ({ name, value: id })),
         })
       : undefined;
 
@@ -149,10 +146,11 @@ export async function runInit(cwd: string): Promise<void> {
     await appendLines(join(cwd, ".env"), envLines);
   }
 
-  const provider = gitProvider ?? detected;
-  if (repo && provider && !(provider === "github" ? current.githubToken : current.gitlabToken)) {
-    const cli = provider === "github" ? "gh" : "glab";
-    const envVar = provider === "github" ? ENV_VARS.githubToken : ENV_VARS.gitlabToken;
+  const providerId = gitProvider ?? detected;
+  const provider = providerId ? getProvider(providerId) : null;
+  if (repo && provider && !current[provider.tokenKey]) {
+    const { cli, tokenKey } = provider;
+    const envVar = ENV_VARS[tokenKey];
     console.log(
       (await isCliLoggedIn(cli, repo.host))
         ? pc.green(`✓ Pull request links use your ${cli} login.`)

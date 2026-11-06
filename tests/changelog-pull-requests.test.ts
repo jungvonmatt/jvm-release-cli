@@ -82,6 +82,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -273,6 +274,22 @@ describe("createPullRequestClient", () => {
     );
   });
 
+  test("uses the API of the GitLab CI job's instance", async () => {
+    vi.stubEnv("CI_SERVER_URL", "http://git.acme.com");
+    vi.stubEnv("CI_API_V4_URL", "http://git.acme.com/gitlab/api/v4");
+    fetchMock.mockResolvedValue({ ok: true, json: async () => gitlabMr });
+
+    const client = await createPullRequestClient(
+      { jiraBaseUrl: "", gitlabToken: "glt", gitProvider: "gitlab" },
+      { host: "git.acme.com", path: "acme/shop" },
+    );
+    await client!.get(41);
+
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      "http://git.acme.com/gitlab/api/v4/projects/acme%2Fshop/merge_requests/41",
+    );
+  });
+
   test("throws a readable error when the API fails", async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 404 });
 
@@ -350,6 +367,17 @@ describe("attachPullRequests", () => {
     await attachPullRequests(nodes, { provider: "github", get });
 
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("(#1, #2, #3)"));
+  });
+
+  test("lists failed GitLab lookups as merge request references", async () => {
+    const get = vi.fn(async () => {
+      throw new Error("401 Unauthorized");
+    });
+    const nodes = [makeNode("One (!1)"), makeNode("Two (!2)")];
+
+    await attachPullRequests(nodes, { provider: "gitlab", get });
+
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("(!1, !2)"));
   });
 
   test("ignores back-merge PRs from the default long-lived branches", async () => {
