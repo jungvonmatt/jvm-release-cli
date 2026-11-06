@@ -19,6 +19,7 @@ import { DEFAULT_TICKET_PATTERN, ENV_VARS, loadChangelogConfig, withProtocol } f
 import { verifyJiraCredentials } from "../changelog/jira.ts";
 import type { GitProvider } from "../changelog/types.ts";
 import { isPromptCancel } from "../ui.ts";
+import { isCI } from "../ci.ts";
 import { findExistingConfig, inferTicketPattern, isCliLoggedIn } from "./detect.ts";
 import { appendLines, RC_FILE, writeRcFile } from "./files.ts";
 
@@ -36,6 +37,13 @@ const isValidRegExp = (value: string): boolean => {
  * changes into `cwd` first.
  */
 export async function runInit(cwd: string): Promise<void> {
+  if (isCI()) {
+    throw new Error(
+      "`jvm-release init` asks questions, so it cannot run in CI. Commit .release-clirc.json " +
+        "from your machine, and set the credentials as CI variables.",
+    );
+  }
+
   const existing = await findExistingConfig(cwd);
   if (existing) {
     console.log(`Config already exists in ${existing}. Edit that file instead.`);

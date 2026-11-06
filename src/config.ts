@@ -1,5 +1,6 @@
 import { loadConfig } from "@jungvonmatt/config-loader";
 import type { ChangelogConfig } from "./changelog/types.ts";
+import { isCI as detectCI } from "./ci.ts";
 
 /**
  * Adds `https://` to a bare host such as `myorg.atlassian.net`.
@@ -21,7 +22,7 @@ export const ENV_VARS = {
 } as const satisfies Partial<Record<keyof ChangelogConfig, string>>;
 
 export async function loadChangelogConfig(cwd?: string): Promise<ChangelogConfig> {
-  const isCI = Boolean(process.env.CI);
+  const isCI = detectCI();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result = await loadConfig<any>({

@@ -1,7 +1,8 @@
-import { select, confirm } from "@inquirer/prompts";
+import { select } from "@inquirer/prompts";
 import semver from "semver";
 import pc from "picocolors";
 import Version from "./version.ts";
+import { confirmOrFail, isCI } from "./ci.ts";
 import {
   getLatestReleaseTag,
   getLatestTag,
@@ -77,9 +78,8 @@ export const getNextVersions = (
 /**
  * Interactive UI flow for selecting which version to publish.
  *
- * This prompts the user for either:
- * - a deployment target (`prerelease` / `production`), or
- * - an explicit SemVer increment (e.g. `patch`, `prepatch`)
+ * Without `target`, it asks for the deployment target (`prerelease` / `production`).
+ * In CI nobody can answer, so it throws when it would ask.
  */
 export const ui = async (
   target: ReleaseTarget | undefined,
@@ -99,10 +99,10 @@ export const ui = async (
   // A production release that promotes a prerelease needs no new commits: it releases the
   // commit of that prerelease
   if (!hasCommits && !(target === "production" && promotedTag)) {
-    const shouldContinue = await confirm({
-      message: "No commits found since previous release, continue?",
-      default: false,
-    });
+    const shouldContinue = await confirmOrFail(
+      { message: "No commits found since previous release, continue?", default: false },
+      `No commits since ${latestTag}, so there is nothing to release.`,
+    );
 
     if (!shouldContinue) {
       return {
@@ -126,6 +126,12 @@ export const ui = async (
       version:
         target === "prerelease" ? newPrereleaseVersion.toString() : newReleaseVersion.toString(),
     };
+  }
+
+  if (isCI()) {
+    throw new Error(
+      "No release target. In CI, pass it as an argument: jvm-release prerelease or jvm-release production.",
+    );
   }
 
   return await select({

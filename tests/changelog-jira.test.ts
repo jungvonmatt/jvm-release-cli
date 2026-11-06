@@ -68,6 +68,19 @@ test("fetchJiraTickets names jvm-release init when credentials are missing", asy
   expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("jvm-release init"));
 });
 
+test("fetchJiraTickets names the CI variables when credentials are missing in CI", async () => {
+  vi.stubEnv("CI", "true");
+  try {
+    await fetchJiraTickets(["PROJ-1"], { jiraBaseUrl: config.jiraBaseUrl });
+  } finally {
+    vi.unstubAllEnvs();
+  }
+  expect(console.warn).toHaveBeenCalledWith(
+    expect.stringContaining("Set CHANGELOG_JIRA_API_EMAIL and CHANGELOG_JIRA_API_TOKEN"),
+  );
+  expect(console.warn).not.toHaveBeenCalledWith(expect.stringContaining("jvm-release init"));
+});
+
 describe("verifyJiraCredentials", () => {
   test("calls /myself with Basic auth and returns true on success", async () => {
     fetchMock.mockResolvedValue({ ok: true, status: 200 });

@@ -1,6 +1,6 @@
 // Runs the git helpers against a real repository, because the exact git behavior matters here:
 // `git check-ignore` does not report tracked files, even when `.gitignore` lists them.
-import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -14,6 +14,9 @@ import {
   pushRelease,
   recordReleaseStart,
   undoRelease,
+  verifyFullHistory,
+  verifyGitIdentity,
+  verifyOriginCanPush,
 } from "../src/git.ts";
 
 const originalCwd = process.cwd();
@@ -245,5 +248,70 @@ describe("pushRelease", () => {
 
     expect(onOrigin("log", "--format=%s", "-1", "main")).toBe("other");
     expect(onOrigin("tag", "--list")).toBe("");
+  });
+});
+
+// GitLab CI checks out a detached commit in a shallow clone, with no git user and an origin URL
+// that carries the job token
+describe("a CI checkout", () => {
+  beforeEach(() => {
+    git("symbolic-ref", "HEAD", "refs/heads/main");
+    git("commit", "-q", "--allow-empty", "-m", "init");
+    git("commit", "-q", "--allow-empty", "-m", "PROJ-1 add basket");
+  });
+
+  test("names the checkout command on a detached HEAD", async () => {
+    git("checkout", "-q", "--detach");
+
+    await expect(getCurrentBranch()).rejects.toThrow("HEAD is detached");
+    await expect(getCurrentBranch()).rejects.toThrow("git checkout -B");
+  });
+
+  test("passes with the full history", async () => {
+    await expect(verifyFullHistory()).resolves.toBeUndefined();
+  });
+
+  test("stops in a shallow clone", async () => {
+    const clone = await mkdtemp(join(tmpdir(), "release-cli-shallow-"));
+    try {
+      execFileSync("git", ["clone", "-q", "--depth=1", `file://${dir}`, clone]);
+      process.chdir(clone);
+
+      await expect(verifyFullHistory()).rejects.toThrow("GIT_DEPTH: 0");
+    } finally {
+      process.chdir(dir);
+      await rm(clone, { recursive: true, force: true });
+    }
+  });
+
+  test("passes with a git user", async () => {
+    git("config", "user.name", "Release Bot");
+    git("config", "user.email", "release-bot@example.com");
+
+    await expect(verifyGitIdentity()).resolves.toBeUndefined();
+  });
+
+  test("stops without a git user", async () => {
+    // Ignore the developer's global git user, and do not guess one from the host name
+    vi.stubEnv("GIT_CONFIG_GLOBAL", join(dir, "no-global-config"));
+    vi.stubEnv("GIT_CONFIG_NOSYSTEM", "1");
+    git("config", "user.useConfigOnly", "true");
+    try {
+      await expect(verifyGitIdentity()).rejects.toThrow("No git user");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("stops when origin uses the CI job token", async () => {
+    git("remote", "add", "origin", "https://gitlab-ci-token:abc@gitlab.com/acme/shop.git");
+
+    await expect(verifyOriginCanPush()).rejects.toThrow("CI job token");
+  });
+
+  test("passes when origin uses a token that can push", async () => {
+    git("remote", "add", "origin", "https://release-bot:glpat-x@gitlab.com/acme/shop.git");
+
+    await expect(verifyOriginCanPush()).resolves.toBeUndefined();
   });
 });

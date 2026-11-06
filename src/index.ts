@@ -6,6 +6,10 @@
 // A production release promotes the newest prerelease when one is pending, and merges that
 // version bump into the release branch. This can conflict with a hotfix flow, so the CLI asks
 // before it continues on a `hotfix/*` branch.
+//
+// In CI (`CI` is set) nothing prompts: a question that needs an answer stops the release with an
+// error, the release page URL goes to the log instead of a browser, and a GitHub release is
+// created through the API instead of opened as a draft.
 
 import { exec } from "node:child_process";
 import { resolve } from "node:path";
@@ -14,11 +18,13 @@ import semver from "semver";
 import { defineCommand, runMain } from "citty";
 import pc from "picocolors";
 import { Listr } from "listr2";
-import { confirm } from "@inquirer/prompts";
 import {
   verifyCurrentBranchIsReleaseBranch,
   verifyWorkingTreeIsClean,
   verifyRemoteHistoryIsClean,
+  verifyFullHistory,
+  verifyGitIdentity,
+  verifyOriginCanPush,
   getRemoteRepository,
   detectProvider,
   hasTag,
@@ -38,22 +44,14 @@ import { verifyVersionIsNewer } from "./version.ts";
 import { generateChangelog } from "./changelog/index.ts";
 import { loadChangelogConfig } from "./config.ts";
 import { init } from "./init/index.ts";
-import { getReleasePage } from "./release-page.ts";
-import { createGitlabRelease } from "./gitlab-release.ts";
+import { createRelease } from "./create-release.ts";
+import { confirmOrFail, isCI, showReleasePage } from "./ci.ts";
 import type { ChangelogConfig } from "./changelog/types.ts";
 import type { ReleaseContext } from "./types.ts";
 import pkg from "../package.json" with { type: "json" };
 
 const ROOT = process.cwd();
 const execa = promisify(exec);
-
-/**
- * Opens a URL in the system browser (lazy-loads `open` so it doesn't affect startup time).
- */
-const openUrl = async (url: string): Promise<void> => {
-  const { default: open } = await import("open");
-  await open(url);
-};
 
 const main = defineCommand({
   meta: {
@@ -106,6 +104,9 @@ const main = defineCommand({
       if (args.cwd) {
         process.chdir(root);
       }
+
+      // Without the full history the tags are missing, and the version would be wrong
+      await verifyFullHistory();
 
       if (changelogOnly) {
         const [latestTag, latestReleaseTag] = await Promise.all([
@@ -188,10 +189,10 @@ const main = defineCommand({
         console.log(pc.yellow("   Consider tagging and releasing the hotfix by hand."));
         console.log("");
 
-        const shouldContinue = await confirm({
-          message: "Do you want to continue with the automated release anyway?",
-          default: false,
-        });
+        const shouldContinue = await confirmOrFail(
+          { message: "Do you want to continue with the automated release anyway?", default: false },
+          `Release from ${currentBranch} stopped: CI cannot confirm a release from a hotfix branch.`,
+        );
 
         if (!shouldContinue) {
           console.log("");
@@ -232,6 +233,16 @@ const main = defineCommand({
         {
           title: "Check remote history",
           task: () => verifyRemoteHistoryIsClean(),
+        },
+        {
+          title: "Check git user",
+          skip: () => preview,
+          task: () => verifyGitIdentity(),
+        },
+        {
+          title: "Check push access",
+          skip: () => preview,
+          task: () => verifyOriginCanPush(),
         },
         {
           title: "Check package version",
@@ -397,7 +408,7 @@ const main = defineCommand({
             },
           },
           {
-            title: "Opening release page",
+            title: isCI() ? "Creating release page" : "Opening release page",
             task: async () => {
               const repo = await getRemoteRepository();
               if (!repo) {
@@ -409,44 +420,28 @@ const main = defineCommand({
 
               const provider =
                 changelogConfig?.gitProvider ?? detectProvider(repo.host) ?? "github";
-              const page = getReleasePage(repo, provider, {
-                version: ctx.version,
-                changelog: ctx.changelog,
-                isPrerelease: Boolean(ctx.isPrerelease),
-                target: branch,
-              });
-              ctx.notesInReleasePage = page.includesNotes;
-              let url = page.url;
-
-              // GitLab's page cannot be prefilled with notes, so create the release through the
-              // API and open its edit page. If that fails, open the empty page and print the notes.
-              if (provider === "gitlab" && !preview) {
-                try {
-                  url = await createGitlabRelease(repo, changelogConfig?.gitlabToken, {
-                    version: ctx.version,
-                    changelog: ctx.changelog,
-                  });
-                  ctx.notesInReleasePage = true;
-                } catch (error: unknown) {
-                  console.warn(
-                    pc.yellow(`✗ Could not create the GitLab release: ${(error as Error).message}`),
-                  );
-                }
-              }
-
-              try {
-                await openUrl(url);
-              } catch (error: unknown) {
-                console.warn(pc.yellow(`✗ Failed to open browser: ${(error as Error).message}`));
-                console.warn(pc.yellow("Please open the following URL in your browser:"));
-                console.warn(pc.yellow(url));
-              }
+              const created = await createRelease(
+                repo,
+                provider,
+                changelogConfig,
+                {
+                  version: ctx.version,
+                  changelog: ctx.changelog,
+                  isPrerelease: Boolean(ctx.isPrerelease),
+                  target: branch,
+                },
+                preview,
+              );
+              ctx.notesInReleasePage = created.notesInReleasePage;
+              await showReleasePage(created.url);
             },
           },
         ],
         {
           concurrent: false,
           exitOnError: true,
+          // A CI log is not a terminal: print one line per task instead of redrawing spinners
+          fallbackRendererCondition: () => isCI(),
           rendererOptions: {
             collapseSubtasks: true,
             collapseErrors: false,

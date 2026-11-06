@@ -69,6 +69,17 @@ afterEach(async () => {
 });
 
 describe("runInit", () => {
+  test("stops in CI, because nobody can answer its questions", async () => {
+    vi.stubEnv("CI", "true");
+    try {
+      await expect(runInit(dir)).rejects.toThrow("cannot run in CI");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(prompts.input).not.toHaveBeenCalled();
+    expect(await readdir(dir)).toEqual([]);
+  });
+
   test("writes only non-secret keys to .release-clirc.json", async () => {
     prompts.input
       .mockResolvedValueOnce("https://x.atlassian.net")
